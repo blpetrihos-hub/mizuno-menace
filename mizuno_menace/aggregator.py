@@ -11,6 +11,7 @@ from .fetch_budget import (
 )
 from .models import ItemResult, Listing, Product
 from .deal_scorer import score_deals
+from .listing_filters import drop_excluded_listings
 from .reference_resolver import apply_references, reference_source_counts
 from .search_criteria import APPAREL_SIZE, SHOE_SIZE_EU, SHOE_SIZE_US
 from .sources.base import PriceSource
@@ -45,6 +46,7 @@ class Aggregator:
                     lst.reference_source = "watchlist"
             listings.extend(found)
 
+        listings, _ = drop_excluded_listings(listings)
         listings.sort(key=lambda lst: lst.total)
         apply_references(listings, allow_estimated=True)
         score_deals(listings)
@@ -101,10 +103,13 @@ class Aggregator:
                 continue
             raw.extend(found)
 
+        raw, excluded_socks = drop_excluded_listings(raw)
+
         apply_references(raw, allow_estimated=False)
         score_deals(raw)
         self.last_scan_stats = {
             "listings": len(raw),
+            "excluded_socks": excluded_socks,
             "page_budget": page_budget,
             "ebay_limit": ebay_limit,
             "references": reference_source_counts(raw),

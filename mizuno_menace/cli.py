@@ -20,7 +20,6 @@ from .scan_settings import ScanSettings, load_scan_settings, save_scan_settings
 from .fetch_budget import DEFAULT_MAX_PAGES, DEFAULT_SOURCE_LIMIT, effective_max_pages
 from .paths import find_config, user_data_dir
 from .products import load_products, products_from_queries
-from .listing_filters import EXCLUSION_LABELS
 from .search_criteria import plan_scan_searches, us_shoe_to_eu
 from .sources import DemoSource, EbaySource, FootStoreSource
 
@@ -168,7 +167,7 @@ def _run_scan(args: argparse.Namespace, console: Console, scan_settings: ScanSet
             return 2
         console.print(
             f"Checking {len(products)} watchlist item(s) via "
-            f"{', '.join(s.name for s in sources)} …\n"
+            f"{', '.join(s.name for s in sources)} ...\n"
         )
         results = agg.search_all(products)
     else:
@@ -180,12 +179,12 @@ def _run_scan(args: argparse.Namespace, console: Console, scan_settings: ScanSet
         if custom_query:
             console.print(
                 f'Scanning Mizuno eBay deals (custom: "{custom_query}") via '
-                f"{', '.join(s.name for s in sources)} …"
+                f"{', '.join(s.name for s in sources)} ..."
             )
         else:
             console.print(
                 f"Scanning Mizuno eBay deals ({scope_label}) via "
-                f"{', '.join(s.name for s in sources)} …"
+                f"{', '.join(s.name for s in sources)} ..."
             )
         cfg = load_ebay_config()
         if cfg.is_configured:
@@ -240,13 +239,9 @@ def _run_scan(args: argparse.Namespace, console: Console, scan_settings: ScanSet
             )
             pages = stats.get("footstore_pages")
             extra = f", {pages} foot-store pages" if pages else ""
-            excluded_bits = []
-            for reason, label in EXCLUSION_LABELS.items():
-                count = stats.get(f"excluded_{reason}", 0)
-                if count:
-                    excluded_bits.append(f"{count} {label}")
-            if excluded_bits:
-                extra += ", excluded: " + ", ".join(excluded_bits)
+            excluded_total = stats.get("excluded", 0)
+            if excluded_total:
+                extra += f", {excluded_total} filtered"
             console.print(
                 f"  [dim]Fetched {stats.get('listings', 0)} listings{extra}[/dim]"
             )

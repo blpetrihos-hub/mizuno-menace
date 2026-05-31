@@ -60,6 +60,8 @@ _BASEBALL_GEAR = re.compile(
     r"baseball|"
     r"softball|"
     r"fastpitch|"
+    r"batting|"
+    r"hitting|"
     r"batting\s+gloves?|"
     r"batting\s+tee|"
     r"baseball\s+gloves?|"
@@ -80,12 +82,28 @@ _BASEBALL_GEAR = re.compile(
 _FIELD_SPORT = re.compile(
     r"\b("
     r"futsal|"
+    r"soccer|"
     r"soccer\s+shoes?|"
+    r"football|"
+    r"tennis|"
     r"monarcida|"
     r"neo\s+sala|"
     r"wave\s+lightrevo|"
     r"lightrevo|"
     r"turf\s+shoes?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_YOUTH_WORD = re.compile(
+    r"\b("
+    r"youth|"
+    r"junior|"
+    r"kids?|"
+    r"kid'?s?|"
+    r"toddler|"
+    r"infant|"
+    r"little\s+league"
     r")\b",
     re.IGNORECASE,
 )
@@ -102,7 +120,9 @@ _JUNK_MERCH = re.compile(
     r"meme|"
     r"safety\s+vest|"
     r"saftey\s+vest|"
-    r"promo\s+saftey"
+    r"promo\s+saftey|"
+    r"ncaa|"
+    r"university\s+of"
     r")\b",
     re.IGNORECASE,
 )
@@ -110,6 +130,7 @@ _JUNK_MERCH = re.compile(
 EXCLUSION_LABELS: dict[str, str] = {
     "socks": "sock",
     "womens": "women's",
+    "youth": "youth",
     "cleats": "cleat",
     "unisex": "unisex",
     "golf": "golf",
@@ -132,6 +153,10 @@ def is_socks_listing(text: str) -> bool:
 
 def is_womens_listing(text: str) -> bool:
     return bool(_WOMENS_WORD.search(text or ""))
+
+
+def is_youth_listing(text: str) -> bool:
+    return bool(_YOUTH_WORD.search(text or ""))
 
 
 def is_unisex_listing(text: str) -> bool:
@@ -184,6 +209,8 @@ def exclusion_reason(lst: Listing) -> str | None:
         return "socks"
     if is_womens_listing(text):
         return "womens"
+    if is_youth_listing(text):
+        return "youth"
     if is_cleats_listing(text):
         return "cleats"
     if is_unisex_listing(text):

@@ -4,9 +4,9 @@
   <img src="mizuno_menace/assets/logo.png" alt="Mizuno Menace" width="480">
 </p>
 
-Find **New With Tags, Buy It Now** Mizuno apparel and shoes on **eBay** and rank the best deals using an indexable **deal index** — percent below a verifiable reference, not keyword guesses.
+Find **New With Tags, Buy It Now** Mizuno mens apparel and shoes on **eBay** and rank the best deals using an indexable **deal index** — percent below a verifiable reference, not keyword guesses.
 
-On launch, a settings page lets you pick **apparel size**, **shoe size (US)**, and **how many deals** (10–50) before the scan runs.
+On launch, a settings page lets you pick **apparel size**, **shoe size (US)**, optional **custom eBay search**, and **how many deals** (10–50) before the scan runs.
 
 ## Features
 
@@ -55,15 +55,24 @@ Preferences are saved to `%LOCALAPPDATA%\MizunoMenace\settings.json`.
 python run.py --demo --no-settings -t 30
 ```
 
-### Build local executable
+## Desktop app (Windows)
+
+Build and deploy to your Desktop:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1
+powershell -ExecutionPolicy Bypass -File deploy-desktop.ps1
 ```
 
-Output: `dist\MizunoMenace.exe` plus `dist\.env.example`.
+Output folder: `Desktop\Mizuno Menace\` with `Click Me To Run.lnk`, `MizunoMenace.exe`, and `.env`.
 
-**After building:** copy `dist\.env.example` → `dist\.env`, add your eBay keys, run the exe. Reports and cache go to `%LOCALAPPDATA%\MizunoMenace\`.
+To zip that folder for sharing:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File package-share.ps1
+```
+
+Reports and cache go to `%LOCALAPPDATA%\MizunoMenace\`.
 
 ## Configuration
 
@@ -80,10 +89,10 @@ Optional: `EBAY_ENV=production`, `EBAY_MARKETPLACE_ID=EBAY_US`
 | --- | --- |
 | `-t, --top` | Top deals to show (skips settings page when set) |
 | `--no-settings` | Skip settings page; use saved preferences |
-| `--footstore` | Also scan foot-store.com (dev/test only) |
 | `--demo` | Offline demo using synthetic eBay-like listings |
 | `--watchlist` | Legacy watchlist mode via `products.json` |
 | `--no-browser` | Skip opening the HTML report |
+| `--footstore` | Also scan foot-store.com (dev/test only) |
 
 ## How deals are scored
 
@@ -100,32 +109,40 @@ References are chosen in order — the Ref column shows which tier was used:
 
 **No keyword MSRP estimates** in default scan mode — if nothing above applies, the listing is not ranked as a deal.
 
-This is designed so scores are **grounded in observable eBay prices** and can be stored/compared over time (`deal_index` in JSON export).
-
 ## eBay search
 
-Two Browse API queries (built from your size choices, plus NWT/BIN filters), for example:
+Default mode runs two Browse API queries (from your size choices, plus NWT/BIN filters), for example:
 
 - `Mizuno medium mens running NWT` — mens M apparel
 - `Mens Mizuno running size 11 new` — mens US 11 shoes
 
+Optional **custom search** replaces those preset queries. Size filters still apply when you pick Apparel only or Shoes only.
+
 Filters: `conditionIds:{1000}`, `buyingOptions:{FIXED_PRICE}`, `sort=price`, size aspects.
 
-## Project structure
+## Project layout
 
 ```
-mizuno_menace/
-  cli.py                 Entry point
-  launcher.py            Settings page (browser UI)
-  scan_settings.py       Saved preferences (top, sizes)
-  search_criteria.py     Size options and eBay query text
-  deal_scorer.py         Peer median deal index (eBay-native)
-  reference_resolver.py  Official MSRP + eBay seller list
-  sources/ebay_source.py   eBay Browse API
-  sources/demo_source.py   Offline demo (eBay-shaped data)
-  sources/footstore_source.py  Optional test scraper (--footstore)
+run.py                   Entry point (source + PyInstaller)
+build.ps1                Build MizunoMenace.exe
+deploy-desktop.ps1       Copy exe + shortcut to Desktop
+package-share.ps1        Zip Desktop folder for sharing
 .env.example             eBay API key template
-build.ps1                PyInstaller build script
+products.json            Legacy watchlist (--watchlist)
+mizuno_menace/
+  cli.py                 Command-line interface
+  launcher.py            Settings page (browser UI)
+  scan_settings.py       Saved preferences
+  search_criteria.py     Size options and eBay query text
+  listing_filters.py     Post-fetch result filtering
+  deal_scorer.py         Peer median deal index
+  reference_resolver.py  Official MSRP + eBay seller list
+  aggregator.py          Scan orchestration
+  output.py              Console + HTML report
+  sources/
+    ebay_source.py       eBay Browse API
+    demo_source.py       Offline demo data
+    footstore_source.py  Optional test scraper
 ```
 
 ## Requirements

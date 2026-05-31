@@ -114,4 +114,33 @@ class DemoSource(PriceSource):
                 )
                 lst.product_name = normalize_product_name(title)
                 listings.append(lst)
+
+        # Noise listings (filtered out before ranking; exercises custom + default scans).
+        noise = [
+            ("Mizuno Baseball Elite Jersey Mens M NWT", "apparel", ""),
+            ("Mizuno Batting Jacket Mens Medium New With Tags", "apparel", ""),
+            ("Mizuno Wave Lightrevo Baseball Softball Turf Shoes", "shoe", ""),
+            ("Mizuno Womens Running Shirt Medium NWT", "apparel", ""),
+            ("Mizuno Running Socks 3-Pack Mens", "apparel", ""),
+            ("Mizuno Youth Running Jacket Medium", "apparel", ""),
+            ("Mizuno Soccer Training Jacket Mens M", "apparel", ""),
+        ]
+        for i, (title, kind, style_id) in enumerate(noise):
+            if allowed_kinds is not None and kind not in allowed_kinds:
+                continue
+            listings.append(
+                Listing(
+                    title=title,
+                    price=29.99 + i,
+                    currency=self.currency,
+                    source=self.name,
+                    url=f"https://example.com/demo/noise-{i}",
+                    condition="New with tags",
+                    condition_id="1000",
+                    shipping=0.0,
+                    buying_option="FIXED_PRICE",
+                    kind=kind,
+                    style_id=style_id,
+                )
+            )
         return listings

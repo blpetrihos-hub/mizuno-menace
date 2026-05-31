@@ -15,6 +15,7 @@ out/
 *.json
 !sample*.json
 !products.json
+!mizuno_menace/data/catalog_seed.json
 
 # PyInstaller build artifacts
 build/

@@ -430,9 +430,6 @@ def dark_theme_css() -> str:
       image-rendering: high-quality;
       image-rendering: -webkit-optimize-contrast;
     }
-    .side-brand--right img {
-      transform: scaleX(-1);
-    }
     @media (max-width: 1040px) {
       .side-brand { display: none; }
     }
@@ -473,13 +470,12 @@ def brand_header_html() -> str:
     return '<header class="brand"><span class="brand-text">Mizuno Menace</span></header>'
 
 
-def _vertical_brand_aside(side: str) -> str:
+def _vertical_brand_aside() -> str:
     uri = _vertical_logo_data_uri()
     if not uri:
         return ""
-    mirror = " side-brand--right" if side == "right" else ""
     return (
-        f'<aside class="side-brand{mirror}">'
+        f'<aside class="side-brand">'
         f'<img src="{uri}" alt="" aria-hidden="true" decoding="async">'
         f"</aside>"
     )
@@ -551,7 +547,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
 
   <h2>Top {top} deals by deal index</h2>
   <div class="table-stage">
-    {_vertical_brand_aside("left")}
+    {_vertical_brand_aside()}
     <div class="table-wrap">
   <table>
     <thead>
@@ -565,7 +561,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
     </tbody>
   </table>
     </div>
-    {_vertical_brand_aside("right")}
+    {_vertical_brand_aside()}
   </div>
   </div>
 </body>

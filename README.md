@@ -82,12 +82,28 @@ Each request also applies:
 - `sort=price` — lowest price + shipping
 - Size aspect from `kind` + `size` (`Size` for apparel, `US Shoe Size` for shoes)
 
+## Reference prices (discount %)
+
+Discounts use a tiered waterfall — the Ref column shows which source was used and when it was verified:
+
+1. **Mizuno MSRP** — live lookup from [usa.mizuno.com](https://usa.mizuno.com) by style/MPN (cached weekly)
+2. **Catalog MSRP** — local catalog cache (`%LOCALAPPDATA%\MizunoMenace\cache\catalog_msrp.json`)
+3. **Market reference** — median of ≥3 NWT retail observations for the same style
+4. **vs seller list** — eBay strikethrough / list price on the listing
+5. **Estimated MSRP** — keyword fallback (legacy rules) when nothing else matches
+6. **No reference** — listing excluded from discount ranking
+
+Style IDs are extracted from foot-store MPN (JSON-LD), URL slugs, and eBay aspects.
+
 ## Project structure
 
 ```
 mizuno_menace/
   cli.py              Entry point and argument parsing
   aggregator.py       Runs sources per product
+  reference_resolver.py  Tiered MSRP / reference-price waterfall
+  mizuno_usa.py       Official Mizuno USA price scraper + cache
+  style_extractor.py  MPN / style id from URLs and eBay aspects
   output.py           Tables, HTML report, exports
   sources/
     ebay_source.py    eBay Browse API

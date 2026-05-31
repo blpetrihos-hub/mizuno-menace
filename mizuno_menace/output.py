@@ -187,7 +187,7 @@ def _color_links_text(listings: list[Listing]) -> Text | str:
             cell.append("   |   ", style="dim")
         for j, lst in enumerate(group):
             if j:
-                cell.append("  ", style="dim")
+                cell.append(" | ", style="dim")
             label = lst.color or "View"
             if lst.url:
                 style = Style(
@@ -222,7 +222,7 @@ def _html_color_links(listings: list[Listing]) -> str:
             else:
                 parts.append(f'<span style="color:{_css_color(lst.color)}">{label}</span>')
         price_label = html.escape(_money(price, group[0].currency))
-        tiers.append(" ".join(parts) + f" <span class='muted'>{price_label}</span>")
+        tiers.append(" | ".join(parts) + f" <span class='muted'>{price_label}</span>")
     return " &nbsp;|&nbsp; ".join(tiers)
 
 
@@ -554,12 +554,16 @@ def write_json(results: list[ItemResult], path: Path) -> None:
                         "total": lst.total,
                         "currency": lst.currency,
                         "color": lst.color,
+                        "style_id": lst.style_id,
                         "condition": lst.condition,
                         "buying_option": lst.buying_option,
                         "msrp": lst.msrp,
                         "ebay_list_price": lst.original_price,
                         "reference_price": lst.reference_price,
                         "reference_label": lst.reference_label,
+                        "reference_source": lst.reference_source,
+                        "reference_as_of": lst.reference_as_of,
+                        "estimated": lst.estimated,
                         "discount_pct": lst.discount_pct,
                         "savings": lst.savings,
                         "url": lst.url,

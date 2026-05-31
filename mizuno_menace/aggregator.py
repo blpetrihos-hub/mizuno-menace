@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from .models import ItemResult, Listing, Product
+from .reference_resolver import apply_references
 from .search_criteria import APPAREL_SIZE, SHOE_SIZE_EU, SHOE_SIZE_US
 from .sources.base import PriceSource
 
@@ -34,9 +35,11 @@ class Aggregator:
                 lst.product_name = product.name
                 if product.msrp:
                     lst.msrp = product.msrp
+                    lst.reference_source = "watchlist"
             listings.extend(found)
 
         listings.sort(key=lambda lst: lst.total)
+        apply_references(listings)
         result = ItemResult(query=product.query, product_name=product.name, listings=listings)
         if errors and not listings:
             result.error = "; ".join(errors)
@@ -62,7 +65,7 @@ class Aggregator:
         max_pages: int = 350,
     ) -> list[ItemResult]:
         """Discover deals by scraping sources; group color variants under one product."""
-        by_product: dict[str, list[Listing]] = defaultdict(list)
+        raw: list[Listing] = []
         for source in self.sources:
             scan = getattr(source, "scan_deals", None)
             if not scan:
@@ -76,9 +79,16 @@ class Aggregator:
                 )
             except Exception:
                 continue
-            for lst in found:
-                key = lst.product_name or lst.title
-                by_product[key].append(lst)
+            raw.extend(found)
+
+        apply_references(raw)
+
+        by_product: dict[str, list[Listing]] = defaultdict(list)
+        for lst in raw:
+            if (lst.discount_pct or 0) <= 0:
+                continue
+            key = lst.product_name or lst.title
+            by_product[key].append(lst)
 
         results: list[ItemResult] = []
         for name, listings in by_product.items():

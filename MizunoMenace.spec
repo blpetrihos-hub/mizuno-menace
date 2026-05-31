@@ -7,7 +7,10 @@ a = Analysis(
     ["run.py"],
     pathex=[],
     binaries=[],
-    datas=[("mizuno_menace/assets", "mizuno_menace/assets")],
+    datas=[
+        ("mizuno_menace/assets", "mizuno_menace/assets"),
+        ("mizuno_menace/data", "mizuno_menace/data"),
+    ],
     hiddenimports=[
         "mizuno_menace.sources.ebay_source",
         "mizuno_menace.sources.footstore_source",

@@ -18,7 +18,8 @@ from pathlib import Path
 
 import requests
 
-from ..msrp_lookup import apply_msrp, normalize_product_name
+from ..msrp_lookup import normalize_product_name
+from ..style_extractor import resolve_style_id
 from ..models import Listing
 from ..paths import cache_dir
 from ..search_criteria import APPAREL_SIZE, SHOE_SIZE_EU, SHOE_SIZE_US
@@ -352,8 +353,14 @@ class FootStoreSource(PriceSource):
             color = _normalize_color(str(node.get("color", "") or "").strip())
             if not color:
                 color = _color_from_slug(url)
+            title = str(node.get("name", "")).strip()
+            style_id = resolve_style_id(
+                url=url,
+                footstore_offers=offers,
+                title=title,
+            )
             return Listing(
-                title=str(node.get("name", "")).strip(),
+                title=title,
                 price=price,
                 currency=currency or "USD",
                 source=self.name,
@@ -361,6 +368,7 @@ class FootStoreSource(PriceSource):
                 condition=condition,
                 buying_option="FIXED_PRICE",
                 color=color,
+                style_id=style_id,
             ), False, description
         return None, False, ""
 
@@ -396,9 +404,6 @@ class FootStoreSource(PriceSource):
             if not self._title_is_mens(listing.title, desc):
                 continue
             listing.product_name = normalize_product_name(listing.title)
-            apply_msrp(listing)
-            if (listing.discount_pct or 0) <= 0:
-                continue
             listings.append(listing)
         self._last_oos_count = 0
         return listings

@@ -18,6 +18,7 @@ import requests
 
 from ..config import EbayConfig, load_ebay_config
 from ..models import Listing
+from ..style_extractor import resolve_style_id
 from .base import PriceSource
 
 OAUTH_SCOPE = "https://api.ebay.com/oauth/api_scope"
@@ -164,6 +165,10 @@ class EbaySource(PriceSource):
                     buying_option=_buying_option(item),
                     original_price=_original_price(item),
                     color=_aspect_color(item),
+                    style_id=resolve_style_id(
+                        ebay_aspects=item.get("localizedAspects") or [],
+                        title=item.get("title", "").strip(),
+                    ),
                 )
             )
         return listings
@@ -178,7 +183,7 @@ class EbaySource(PriceSource):
         **kwargs,
     ) -> list[Listing]:
         from ..models import Product
-        from ..msrp_lookup import apply_msrp, normalize_product_name
+        from ..msrp_lookup import normalize_product_name
         from ..search_criteria import (
             APPAREL_SIZE,
             EBAY_APPAREL_QUERY,
@@ -210,10 +215,8 @@ class EbaySource(PriceSource):
                     continue
                 if lst.url:
                     seen_urls.add(lst.url)
-                apply_msrp(lst)
                 lst.product_name = normalize_product_name(lst.title)
-                if lst.discount_pct is not None and (lst.discount_pct or 0) > 0:
-                    listings.append(lst)
+                listings.append(lst)
         return listings
 
 

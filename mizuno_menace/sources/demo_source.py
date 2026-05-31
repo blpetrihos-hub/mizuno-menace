@@ -54,7 +54,7 @@ class DemoSource(PriceSource):
         max_pages: int = 350,
         **kwargs,
     ) -> list[Listing]:
-        from ..msrp_lookup import apply_msrp, normalize_product_name
+        from ..msrp_lookup import normalize_product_name
 
         samples = [
             "Jacket Mizuno Sapporo Hybrid GLT",
@@ -93,6 +93,8 @@ class DemoSource(PriceSource):
                 buying_option="FIXED_PRICE",
                 color=color,
                 msrp=float(msrp),
+                reference_source="catalog",
+                reference_as_of="demo",
             )
             lst.product_name = normalize_product_name(title)
             listings.append(lst)

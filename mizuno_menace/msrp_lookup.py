@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import re
 
-from .models import Listing
-
 # (keyword fragments, MSRP USD) — order: longest / most specific first.
 _MSRP_RULES: list[tuple[tuple[str, ...], float]] = [
     (("sapporo", "hybrid", "glt"), 160.0),
@@ -95,7 +93,8 @@ def normalize_product_name(title: str) -> str:
     return " ".join(w.capitalize() for w in key.split()) or title.strip()
 
 
-def lookup_msrp(title: str) -> float | None:
+def lookup_estimated_msrp(title: str) -> float | None:
+    """Keyword-based MSRP estimate (lowest-confidence fallback tier)."""
     text = _title_key(title)
     if not text:
         return None
@@ -108,7 +107,6 @@ def lookup_msrp(title: str) -> float | None:
     return best[1] if best else None
 
 
-def apply_msrp(listing: Listing) -> None:
-    msrp = lookup_msrp(listing.title)
-    if msrp:
-        listing.msrp = msrp
+def lookup_msrp(title: str) -> float | None:
+    """Backward-compatible alias for the estimated keyword lookup."""
+    return lookup_estimated_msrp(title)

@@ -64,9 +64,13 @@ class Listing:
     shipping: Optional[float] = None
     buying_option: str = ""
     color: str = ""
+    style_id: str = ""
     # Reference prices for discount math:
-    msrp: Optional[float] = None            # Mizuno retail (from products.json)
+    msrp: Optional[float] = None
     original_price: Optional[float] = None  # eBay seller's list/strikethrough
+    reference_source: str = ""   # mizuno_official, catalog, market, ebay_list, estimated
+    reference_as_of: str = ""      # YYYY-MM-DD when reference was verified
+    estimated: bool = False        # True for keyword-rule fallback tier
     # Filled in when grouped under a product:
     product_name: str = ""
 
@@ -87,11 +91,24 @@ class Listing:
 
     @property
     def reference_label(self) -> str:
-        if self.msrp and self.msrp > 0:
-            return "Mizuno MSRP"
-        if self.original_price and self.original_price > 0:
-            return "eBay list"
-        return ""
+        labels = {
+            "mizuno_official": "Mizuno MSRP",
+            "catalog": "Catalog MSRP",
+            "market": "Market reference",
+            "ebay_list": "vs seller list",
+            "estimated": "Estimated MSRP",
+            "watchlist": "Watchlist MSRP",
+        }
+        label = labels.get(self.reference_source, "")
+        if not label:
+            if self.msrp and self.msrp > 0:
+                return "Mizuno MSRP"
+            if self.original_price and self.original_price > 0:
+                return "eBay list"
+            return ""
+        if self.reference_as_of:
+            return f"{label} ({self.reference_as_of})"
+        return label
 
     @property
     def savings(self) -> Optional[float]:

@@ -106,8 +106,8 @@ This is designed so scores are **grounded in observable eBay prices** and can be
 
 Two Browse API queries (built from your size choices, plus NWT/BIN filters), for example:
 
-- `Mizuno medium mens NWT` — mens M apparel
-- `Mens Mizuno size 11 new` — mens US 11 shoes
+- `Mizuno medium mens running NWT` — mens M apparel
+- `Mens Mizuno running size 11 new` — mens US 11 shoes
 
 Filters: `conditionIds:{1000}`, `buyingOptions:{FIXED_PRICE}`, `sort=price`, size aspects.
 

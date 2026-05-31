@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .models import Listing
 
@@ -16,6 +16,8 @@ _WOMENS_WORD = re.compile(
     r")\b",
     re.IGNORECASE,
 )
+
+_UNISEX_WORD = re.compile(r"\bunisex\b", re.IGNORECASE)
 
 _CLEAT_WORD = re.compile(r"\bcleats?\b|\bcleated\b", re.IGNORECASE)
 
@@ -31,7 +33,6 @@ _CLEAT_SPIKE = re.compile(
     re.IGNORECASE,
 )
 
-# Mizuno field/cleat lines that often omit the word "cleat" in eBay titles.
 _CLEAT_MODEL = re.compile(
     r"\b("
     r"ambition\s+\d+|"
@@ -44,6 +45,60 @@ _CLEAT_MODEL = re.compile(
     re.IGNORECASE,
 )
 
+_GOLF_WORD = re.compile(
+    r"\b("
+    r"golf(?:ing)?|"
+    r"golf\s+shoes?|"
+    r"golf\s+shirt|"
+    r"golf\s+polo"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_FIELD_SPORT = re.compile(
+    r"\b("
+    r"futsal|"
+    r"soccer\s+shoes?|"
+    r"monarcida|"
+    r"neo\s+sala|"
+    r"baseball\s+shoes?|"
+    r"softball\s+shoes?|"
+    r"wave\s+lightrevo|"
+    r"lightrevo|"
+    r"turf\s+shoes?|"
+    r"baseball\s+jersey|"
+    r"softball\s+jersey"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_JUNK_MERCH = re.compile(
+    r"\b("
+    r"funny|"
+    r"reprint|"
+    r"anime|"
+    r"kimetsu|"
+    r"demon\s+slayer|"
+    r"cosplay|"
+    r"parody|"
+    r"meme|"
+    r"safety\s+vest|"
+    r"saftey\s+vest|"
+    r"promo\s+saftey"
+    r")\b",
+    re.IGNORECASE,
+)
+
+EXCLUSION_LABELS: dict[str, str] = {
+    "socks": "sock",
+    "womens": "women's",
+    "cleats": "cleat",
+    "unisex": "unisex",
+    "golf": "golf",
+    "field_sport": "field sport",
+    "junk": "junk/merch",
+}
+
 
 def _listing_text(lst: Listing) -> str:
     parts = [lst.title or ""]
@@ -53,17 +108,18 @@ def _listing_text(lst: Listing) -> str:
 
 
 def is_socks_listing(text: str) -> bool:
-    """True when title/name indicates socks (word-boundary match avoids 'soccer')."""
     return bool(_SOCK_WORD.search(text or ""))
 
 
 def is_womens_listing(text: str) -> bool:
-    """Exclude women's / girls listings."""
     return bool(_WOMENS_WORD.search(text or ""))
 
 
+def is_unisex_listing(text: str) -> bool:
+    return bool(_UNISEX_WORD.search(text or ""))
+
+
 def is_cleats_listing(text: str) -> bool:
-    """Exclude baseball/football/soccer cleats and spiked field shoes."""
     text = text or ""
     return bool(
         _CLEAT_WORD.search(text)
@@ -72,15 +128,31 @@ def is_cleats_listing(text: str) -> bool:
     )
 
 
+def is_golf_listing(text: str) -> bool:
+    return bool(_GOLF_WORD.search(text or ""))
+
+
+def is_field_sport_listing(text: str) -> bool:
+    return bool(_FIELD_SPORT.search(text or ""))
+
+
+def is_junk_merch_listing(text: str) -> bool:
+    return bool(_JUNK_MERCH.search(text or ""))
+
+
 @dataclass
 class ExclusionStats:
-    socks: int = 0
-    womens: int = 0
-    cleats: int = 0
+    counts: dict[str, int] = field(default_factory=dict)
+
+    def record(self, reason: str) -> None:
+        self.counts[reason] = self.counts.get(reason, 0) + 1
 
     @property
     def total(self) -> int:
-        return self.socks + self.womens + self.cleats
+        return sum(self.counts.values())
+
+    def get(self, reason: str) -> int:
+        return self.counts.get(reason, 0)
 
 
 def exclusion_reason(lst: Listing) -> str | None:
@@ -91,6 +163,14 @@ def exclusion_reason(lst: Listing) -> str | None:
         return "womens"
     if is_cleats_listing(text):
         return "cleats"
+    if is_unisex_listing(text):
+        return "unisex"
+    if is_golf_listing(text):
+        return "golf"
+    if is_field_sport_listing(text):
+        return "field_sport"
+    if is_junk_merch_listing(text):
+        return "junk"
     return None
 
 
@@ -105,14 +185,8 @@ def drop_excluded_listings(
     stats = ExclusionStats()
     for lst in listings:
         reason = exclusion_reason(lst)
-        if reason == "socks":
-            stats.socks += 1
-            continue
-        if reason == "womens":
-            stats.womens += 1
-            continue
-        if reason == "cleats":
-            stats.cleats += 1
+        if reason:
+            stats.record(reason)
             continue
         kept.append(lst)
     return kept, stats

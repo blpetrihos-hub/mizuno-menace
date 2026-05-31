@@ -82,12 +82,12 @@ def normalize_custom_query(query: str) -> str:
 def ebay_apparel_query(size: str = APPAREL_SIZE) -> str:
     size = normalize_apparel_size(size)
     word = _APPAREL_QUERY_WORD.get(size, size.lower())
-    return f"Mizuno {word} mens NWT"
+    return f"Mizuno {word} mens running NWT"
 
 
 def ebay_shoe_query(shoe_size_us: str = SHOE_SIZE_US) -> str:
     us = normalize_shoe_size_us(shoe_size_us)
-    return f"Mens Mizuno size {us} new"
+    return f"Mens Mizuno running size {us} new"
 
 
 def us_shoe_to_eu(us: str) -> str:

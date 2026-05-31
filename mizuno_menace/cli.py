@@ -20,7 +20,8 @@ from .scan_settings import ScanSettings, load_scan_settings, save_scan_settings
 from .fetch_budget import DEFAULT_MAX_PAGES, DEFAULT_SOURCE_LIMIT, effective_max_pages
 from .paths import find_config, user_data_dir
 from .products import load_products, products_from_queries
-from .search_criteria import plan_scan_searches, scan_description, us_shoe_to_eu
+from .listing_filters import EXCLUSION_LABELS
+from .search_criteria import plan_scan_searches, us_shoe_to_eu
 from .sources import DemoSource, EbaySource, FootStoreSource
 
 
@@ -240,12 +241,8 @@ def _run_scan(args: argparse.Namespace, console: Console, scan_settings: ScanSet
             pages = stats.get("footstore_pages")
             extra = f", {pages} foot-store pages" if pages else ""
             excluded_bits = []
-            for key, label in (
-                ("excluded_socks", "sock"),
-                ("excluded_womens", "women's"),
-                ("excluded_cleats", "cleat"),
-            ):
-                count = stats.get(key, 0)
+            for reason, label in EXCLUSION_LABELS.items():
+                count = stats.get(f"excluded_{reason}", 0)
                 if count:
                     excluded_bits.append(f"{count} {label}")
             if excluded_bits:

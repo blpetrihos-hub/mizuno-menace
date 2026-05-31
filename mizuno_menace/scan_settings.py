@@ -31,7 +31,12 @@ class ScanSettings:
     custom_query: str = ""
 
     def normalized(self) -> ScanSettings:
-        top = self.top if self.top in VALID_TOP else DEFAULT_TOP
+        try:
+            top = int(self.top)
+        except (TypeError, ValueError):
+            top = DEFAULT_TOP
+        if top <= 0:
+            top = DEFAULT_TOP
         return ScanSettings(
             top=top,
             apparel_size=normalize_apparel_size(self.apparel_size),

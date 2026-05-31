@@ -114,14 +114,13 @@ class Aggregator:
         self.last_scan_stats = {
             "listings": len(raw),
             "excluded": excluded.total,
-            "excluded_socks": excluded.socks,
-            "excluded_womens": excluded.womens,
-            "excluded_cleats": excluded.cleats,
             "page_budget": page_budget,
             "ebay_limit": ebay_limit,
             "references": reference_source_counts(raw),
             "errors": scan_errors,
         }
+        for reason, count in excluded.counts.items():
+            self.last_scan_stats[f"excluded_{reason}"] = count
         for source in self.sources:
             pages = getattr(source, "last_pages_scanned", 0)
             if pages:

@@ -103,13 +103,16 @@ class Aggregator:
                 continue
             raw.extend(found)
 
-        raw, excluded_socks = drop_excluded_listings(raw)
+        raw, excluded = drop_excluded_listings(raw)
 
         apply_references(raw, allow_estimated=False)
         score_deals(raw)
         self.last_scan_stats = {
             "listings": len(raw),
-            "excluded_socks": excluded_socks,
+            "excluded": excluded.total,
+            "excluded_socks": excluded.socks,
+            "excluded_womens": excluded.womens,
+            "excluded_cleats": excluded.cleats,
             "page_budget": page_budget,
             "ebay_limit": ebay_limit,
             "references": reference_source_counts(raw),

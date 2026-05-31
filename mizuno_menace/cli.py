@@ -181,9 +181,17 @@ def main(argv: list[str] | None = None) -> int:
             )
             pages = stats.get("footstore_pages")
             extra = f", {pages} foot-store pages" if pages else ""
-            excluded_socks = stats.get("excluded_socks", 0)
-            if excluded_socks:
-                extra += f", {excluded_socks} sock listing(s) excluded"
+            excluded_bits = []
+            for key, label in (
+                ("excluded_socks", "sock"),
+                ("excluded_womens", "women's"),
+                ("excluded_cleats", "cleat"),
+            ):
+                count = stats.get(key, 0)
+                if count:
+                    excluded_bits.append(f"{count} {label}")
+            if excluded_bits:
+                extra += ", excluded: " + ", ".join(excluded_bits)
             console.print(
                 f"  [dim]Fetched {stats.get('listings', 0)} listings{extra}[/dim]"
             )

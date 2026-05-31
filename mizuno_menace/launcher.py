@@ -1,19 +1,25 @@
-"""Local settings page (browser UI) for choosing how many deals to show."""
+"""Local settings page (browser UI) for scan preferences."""
 
 from __future__ import annotations
 
-import json
 import sys
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs
 
-from .output import brand_header_html, dark_theme_css
-from .paths import user_data_dir
+from .output import _vertical_brand_aside, brand_header_html, dark_theme_css
+from .scan_settings import (
+    DEFAULT_TOP,
+    ScanSettings,
+    VALID_TOP,
+)
+from .search_criteria import (
+    APPAREL_SIZE_OPTIONS,
+    SHOE_SIZE_US_OPTIONS,
+    scan_description,
+)
 
-VALID_TOP = (10, 20, 30, 40, 50)
-DEFAULT_TOP = 30
 SETTINGS_PORT = 8765
 
 
@@ -27,14 +33,41 @@ def top_explicitly_set(argv: list[str] | None = None) -> bool:
     return False
 
 
-def _settings_html(selected: int = DEFAULT_TOP) -> str:
-    options = []
-    for n in VALID_TOP:
-        checked = " checked" if n == selected else ""
-        options.append(
-            f'<label class="choice"><input type="radio" name="top" value="{n}"{checked}>'
-            f"<span>{n} deals</span></label>"
+def _select_options(
+    options: tuple[str, ...],
+    selected: str,
+    *,
+    label_fn=None,
+) -> str:
+    label_fn = label_fn or (lambda v: v)
+    parts = []
+    for value in options:
+        sel = " selected" if value == selected else ""
+        parts.append(
+            f'<option value="{value}"{sel}>{label_fn(value)}</option>'
         )
+    return "".join(parts)
+
+
+def _settings_html(settings: ScanSettings) -> str:
+    settings = settings.normalized()
+    top_options = []
+    for n in VALID_TOP:
+        sel = " selected" if n == settings.top else ""
+        top_options.append(f'<option value="{n}"{sel}>Top {n} deals</option>')
+
+    hint = scan_description(settings.apparel_size, settings.shoe_size_us)
+    apparel_options = _select_options(
+        APPAREL_SIZE_OPTIONS,
+        settings.apparel_size,
+        label_fn=lambda s: f"Size {s}",
+    )
+    shoe_options = _select_options(
+        SHOE_SIZE_US_OPTIONS,
+        settings.shoe_size_us,
+        label_fn=lambda s: f"US {s}",
+    )
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -43,39 +76,58 @@ def _settings_html(selected: int = DEFAULT_TOP) -> str:
   <title>Mizuno Menace</title>
   <style>
 {dark_theme_css()}
+    .setup-stage {{
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(0.75rem, 2.5vw, 1.75rem);
+      margin-top: 0.5rem;
+    }}
+    .setup-stage .side-brand {{
+      flex: 0 0 clamp(72px, 10vw, 120px);
+      align-self: stretch;
+    }}
+    .setup-stage .side-brand img {{
+      max-height: min(52vh, 420px);
+    }}
     .panel {{
-      max-width: 420px;
-      margin: 0 auto;
+      flex: 0 1 440px;
+      max-width: 440px;
       text-align: center;
     }}
     h2 {{
-      font-size: 1.1rem;
+      font-size: 1.15rem;
       font-weight: 600;
-      margin: 0 0 1.25rem;
+      margin: 0 0 0.35rem;
     }}
-    .choices {{
-      display: flex;
-      flex-direction: column;
-      gap: 0.55rem;
-      margin-bottom: 1.5rem;
+    h2.deals-heading {{
+      text-align: left;
+      margin: 0 0 0.45rem;
     }}
-    .choice {{
-      display: flex;
-      align-items: center;
-      gap: 0.65rem;
-      padding: 0.65rem 0.85rem;
+    .field {{
+      text-align: left;
+      margin-bottom: 1rem;
+    }}
+    .field label {{
+      display: block;
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-bottom: 0.45rem;
+      color: var(--fg);
+    }}
+    select {{
+      width: 100%;
+      padding: 0.7rem 0.85rem;
+      font-size: 1rem;
+      color: var(--fg);
+      background: #252526;
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: #252526;
       cursor: pointer;
-      text-align: left;
     }}
-    .choice:has(input:checked) {{
+    select:focus {{
+      outline: none;
       border-color: #569cd6;
-      background: #2a2d2e;
-    }}
-    .choice input {{
-      accent-color: #569cd6;
     }}
     button {{
       width: 100%;
@@ -87,6 +139,7 @@ def _settings_html(selected: int = DEFAULT_TOP) -> str:
       border: none;
       border-radius: 6px;
       cursor: pointer;
+      margin-top: 0.35rem;
     }}
     button:hover {{
       background: #e8e8e8;
@@ -97,20 +150,56 @@ def _settings_html(selected: int = DEFAULT_TOP) -> str:
       color: var(--muted);
       line-height: 1.45;
     }}
+    @media (max-width: 720px) {{
+      .setup-stage .side-brand {{ display: none; }}
+    }}
   </style>
 </head>
 <body>
-  <div class="page panel">
+  <div class="page">
     {brand_header_html()}
-    <h2>How many deals to show?</h2>
-    <form method="POST" action="/scan">
-      <div class="choices">
-        {"".join(options)}
+    <div class="setup-stage">
+      {_vertical_brand_aside()}
+      <div class="panel">
+        <h2>Configure your scan</h2>
+        <form method="POST" action="/scan">
+          <div class="field">
+            <label for="apparel_size">Apparel size</label>
+            <select id="apparel_size" name="apparel_size" aria-label="Apparel size">
+              {apparel_options}
+            </select>
+          </div>
+          <div class="field">
+            <label for="shoe_size_us">Shoe size (US)</label>
+            <select id="shoe_size_us" name="shoe_size_us" aria-label="Shoe size US">
+              {shoe_options}
+            </select>
+          </div>
+          <div class="field">
+            <h2 class="deals-heading">Choose How Many Deals To Display</h2>
+            <select id="top" name="top" aria-label="Number of deals to display">
+              {"".join(top_options)}
+            </select>
+          </div>
+          <button type="submit">Start scan</button>
+        </form>
+        <p class="hint" id="scan-hint">{hint}</p>
       </div>
-      <button type="submit">Scan deals</button>
-    </form>
-    <p class="hint">Scrapes foot-store and eBay (when API keys are in .env) for mens M apparel and mens size 11 shoes, ranked by discount vs MSRP.</p>
+      {_vertical_brand_aside()}
+    </div>
   </div>
+  <script>
+    function updateScanHint() {{
+      const apparel = document.getElementById('apparel_size').value;
+      const shoe = document.getElementById('shoe_size_us').value;
+      document.getElementById('scan-hint').textContent =
+        'Searches eBay for New With Tags, Buy It Now Mizuno listings — '
+        + 'mens size ' + apparel + ' apparel and mens US size ' + shoe + ' shoes — '
+        + 'then opens a ranked HTML report.';
+    }}
+    document.getElementById('apparel_size').addEventListener('change', updateScanHint);
+    document.getElementById('shoe_size_us').addEventListener('change', updateScanHint);
+  </script>
 </body>
 </html>
 """
@@ -128,19 +217,17 @@ def _waiting_html() -> str:
   <div class="page" style="text-align:center;padding-top:3rem;">
     {brand_header_html()}
     <p style="color:#cccccc;">Scanning Mizuno deals… this may take a few minutes.</p>
-    <p style="color:#858585;font-size:0.9rem;">Keep this window open — the report will load when finished.</p>
+    <p style="color:#858585;font-size:0.9rem;">Keep this window open — your deal report will open when the scan finishes.</p>
   </div>
 </body>
 </html>
 """
 
 
-def prompt_top_count(default: int = DEFAULT_TOP) -> int:
-    """Open the settings page and block until the user picks 10–50 deals."""
-    if default not in VALID_TOP:
-        default = DEFAULT_TOP
-
-    choice: dict[str, int | None] = {"top": None}
+def prompt_scan_settings(default: ScanSettings | None = None) -> ScanSettings:
+    """Open the settings page and block until the user submits scan preferences."""
+    default = (default or ScanSettings()).normalized()
+    choice: dict[str, ScanSettings | None] = {"settings": None}
     done = threading.Event()
 
     class Handler(BaseHTTPRequestHandler):
@@ -166,12 +253,17 @@ def prompt_top_count(default: int = DEFAULT_TOP) -> int:
             body = self.rfile.read(length).decode("utf-8") if length else ""
             params = parse_qs(body)
             try:
-                top = int(params.get("top", [default])[0])
+                top = int(params.get("top", [default.top])[0])
             except (TypeError, ValueError):
-                top = default
-            if top not in VALID_TOP:
-                top = default
-            choice["top"] = top
+                top = default.top
+            apparel_size = params.get("apparel_size", [default.apparel_size])[0]
+            shoe_size_us = params.get("shoe_size_us", [default.shoe_size_us])[0]
+            settings = ScanSettings(
+                top=top,
+                apparel_size=apparel_size,
+                shoe_size_us=shoe_size_us,
+            ).normalized()
+            choice["settings"] = settings
             waiting = _waiting_html().encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -186,20 +278,10 @@ def prompt_top_count(default: int = DEFAULT_TOP) -> int:
     webbrowser.open(f"http://127.0.0.1:{SETTINGS_PORT}/")
     done.wait()
     server.shutdown()
-    return int(choice["top"] or default)
+    return choice["settings"] or default
 
 
-def save_last_top(top: int) -> None:
-    path = user_data_dir() / "settings.json"
-    path.write_text(json.dumps({"top": top}), encoding="utf-8")
-
-
-def load_last_top(default: int = DEFAULT_TOP) -> int:
-    path = user_data_dir() / "settings.json"
-    if not path.exists():
-        return default
-    try:
-        top = int(json.loads(path.read_text(encoding="utf-8")).get("top", default))
-        return top if top in VALID_TOP else default
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return default
+def prompt_top_count(default: int = DEFAULT_TOP) -> int:
+    """Legacy helper — returns only deal count from the settings page."""
+    settings = prompt_scan_settings(ScanSettings(top=default))
+    return settings.top

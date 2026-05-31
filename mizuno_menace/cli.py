@@ -11,11 +11,12 @@ from rich.console import Console
 from . import output
 from .aggregator import Aggregator
 from .config import ebay_setup_hint, load_ebay_config
-from .launcher import load_last_top, prompt_top_count, save_last_top
+from .launcher import prompt_scan_settings
+from .scan_settings import ScanSettings, load_scan_settings, save_scan_settings
 from .fetch_budget import DEFAULT_MAX_PAGES, DEFAULT_SOURCE_LIMIT, effective_max_pages
 from .paths import find_config, user_data_dir
 from .products import load_products, products_from_queries
-from .search_criteria import APPAREL_SIZE, SHOE_SIZE_US
+from .search_criteria import ebay_apparel_query, ebay_shoe_query, us_shoe_to_eu
 from .sources import DemoSource, EbaySource, FootStoreSource
 
 
@@ -102,13 +103,22 @@ def main(argv: list[str] | None = None) -> int:
 
     console = Console(force_terminal=True)
 
+    saved = load_scan_settings()
     if args.top is not None:
-        top = args.top
+        scan_settings = ScanSettings(
+            top=args.top,
+            apparel_size=saved.apparel_size,
+            shoe_size_us=saved.shoe_size_us,
+        ).normalized()
     elif args.no_settings:
-        top = load_last_top()
+        scan_settings = saved
     else:
-        top = prompt_top_count(load_last_top())
-    save_last_top(top)
+        scan_settings = prompt_scan_settings(saved)
+    save_scan_settings(scan_settings)
+    top = scan_settings.top
+    apparel_size = scan_settings.apparel_size
+    shoe_size_us = scan_settings.shoe_size_us
+    shoe_size_eu = us_shoe_to_eu(shoe_size_us)
 
     use_footstore = args.footstore and not args.demo
     sources = build_sources(
@@ -133,15 +143,16 @@ def main(argv: list[str] | None = None) -> int:
         results = agg.search_all(products)
     else:
         console.print(
-            f"Scanning Mizuno eBay deals (mens {APPAREL_SIZE} apparel, mens US {SHOE_SIZE_US} "
+            f"Scanning Mizuno eBay deals (mens {apparel_size} apparel, mens US {shoe_size_us} "
             f"shoes) via {', '.join(s.name for s in sources)} …"
         )
         cfg = load_ebay_config()
         if cfg.is_configured:
-            from .search_criteria import EBAY_APPAREL_QUERY, EBAY_SHOE_QUERY
+            apparel_query = ebay_apparel_query(apparel_size)
+            shoe_query = ebay_shoe_query(shoe_size_us)
             console.print(
-                f"  eBay queries: [dim]\"{EBAY_APPAREL_QUERY}\"[/dim], "
-                f"[dim]\"{EBAY_SHOE_QUERY}\"[/dim] (NWT, Buy It Now)"
+                f"  eBay queries: [dim]\"{apparel_query}\"[/dim], "
+                f"[dim]\"{shoe_query}\"[/dim] (NWT, Buy It Now)"
             )
         console.print()
         page_budget = effective_max_pages(args.max_pages, top)
@@ -155,7 +166,13 @@ def main(argv: list[str] | None = None) -> int:
             console.print(
                 f"  [dim]foot-store budget: up to {page_budget} pages (test source)[/dim]"
             )
-        results = agg.scan_deals(max_pages=args.max_pages, top=top)
+        results = agg.scan_deals(
+            max_pages=args.max_pages,
+            top=top,
+            apparel_size=apparel_size,
+            shoe_size_us=shoe_size_us,
+            shoe_size_eu=shoe_size_eu,
+        )
         stats = getattr(agg, "last_scan_stats", {})
         if stats:
             refs = stats.get("references", {})

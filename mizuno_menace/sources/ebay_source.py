@@ -189,20 +189,22 @@ class EbaySource(PriceSource):
         from ..msrp_lookup import normalize_product_name
         from ..search_criteria import (
             APPAREL_SIZE,
-            EBAY_APPAREL_QUERY,
-            EBAY_SHOE_QUERY,
             SHOE_SIZE_US,
+            ebay_apparel_query,
+            ebay_shoe_query,
+            normalize_apparel_size,
+            normalize_shoe_size_us,
         )
 
-        apparel_size = apparel_size or APPAREL_SIZE
-        shoe_size_us = shoe_size_us or SHOE_SIZE_US
+        apparel_size = normalize_apparel_size(apparel_size or APPAREL_SIZE)
+        shoe_size_us = normalize_shoe_size_us(shoe_size_us or SHOE_SIZE_US)
         per_query = ebay_limit
         listings: list[Listing] = []
         seen_urls: set[str] = set()
 
         searches = (
-            (EBAY_APPAREL_QUERY, "apparel", apparel_size),
-            (EBAY_SHOE_QUERY, "shoe", shoe_size_us),
+            (ebay_apparel_query(apparel_size), "apparel", apparel_size),
+            (ebay_shoe_query(shoe_size_us), "shoe", shoe_size_us),
         )
         for query, kind, size in searches:
             product = Product(name=query, query=query, kind=kind, size=size)

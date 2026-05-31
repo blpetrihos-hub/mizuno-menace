@@ -6,16 +6,16 @@
 
 Find **New With Tags, Buy It Now** Mizuno apparel and shoes on **eBay** and rank the best deals using an indexable **deal index** — percent below a verifiable reference, not keyword guesses.
 
-**Default mode** queries eBay for **mens medium apparel** and **mens US size 11 shoes**. On launch, a settings page lets you pick **10–50 deals** (in 10s) before the scan runs.
+On launch, a settings page lets you pick **apparel size**, **shoe size (US)**, and **how many deals** (10–50) before the scan runs.
 
 ## Features
 
-- **eBay-first** — Browse API, NWT + BIN filters, size facets (M / US 11)
+- **eBay-first** — Browse API, NWT + BIN filters, size facets
 - **Deal index** — indexable score (% below reference) for ranking and export
 - **Peer pricing** — compares each listing to eBay medians (same style → product → category)
 - **Seller list prices** — uses eBay strikethrough / marketing price when provided
 - **Optional Mizuno MSRP** — official lookup when style/MPN resolves (bonus tier)
-- Settings page, HTML report, color-variant links per product
+- Settings page with size dropdowns, HTML report, color-variant links per product
 
 ## Quick start
 
@@ -45,7 +45,9 @@ The tool looks for `.env` in (first match wins):
 python run.py
 ```
 
-Settings page → pick deal count → scan → HTML report opens in your browser.
+Settings page → pick sizes and deal count → scan → HTML report opens in your browser.
+
+Preferences are saved to `%LOCALAPPDATA%\MizunoMenace\settings.json`.
 
 ### Without eBay keys (demo only)
 
@@ -61,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 
 Output: `dist\MizunoMenace.exe` plus `dist\.env.example`.
 
-**After building:** copy `dist\.env.example` → `dist\.env`, add keys, run the exe. Reports and cache go to `%LOCALAPPDATA%\MizunoMenace\`.
+**After building:** copy `dist\.env.example` → `dist\.env`, add your eBay keys, run the exe. Reports and cache go to `%LOCALAPPDATA%\MizunoMenace\`.
 
 ## Configuration
 
@@ -77,7 +79,7 @@ Optional: `EBAY_ENV=production`, `EBAY_MARKETPLACE_ID=EBAY_US`
 | Flag | Description |
 | --- | --- |
 | `-t, --top` | Top deals to show (skips settings page when set) |
-| `--no-settings` | Skip settings page; use `-t` or last saved choice |
+| `--no-settings` | Skip settings page; use saved preferences |
 | `--footstore` | Also scan foot-store.com (dev/test only) |
 | `--demo` | Offline demo using synthetic eBay-like listings |
 | `--watchlist` | Legacy watchlist mode via `products.json` |
@@ -102,7 +104,7 @@ This is designed so scores are **grounded in observable eBay prices** and can be
 
 ## eBay search
 
-Two Browse API queries (plus NWT/BIN filters):
+Two Browse API queries (built from your size choices, plus NWT/BIN filters), for example:
 
 - `Mizuno medium mens NWT` — mens M apparel
 - `Mens Mizuno size 11 new` — mens US 11 shoes
@@ -114,12 +116,16 @@ Filters: `conditionIds:{1000}`, `buyingOptions:{FIXED_PRICE}`, `sort=price`, siz
 ```
 mizuno_menace/
   cli.py                 Entry point
+  launcher.py            Settings page (browser UI)
+  scan_settings.py       Saved preferences (top, sizes)
+  search_criteria.py     Size options and eBay query text
   deal_scorer.py         Peer median deal index (eBay-native)
   reference_resolver.py  Official MSRP + eBay seller list
   sources/ebay_source.py   eBay Browse API
   sources/demo_source.py   Offline demo (eBay-shaped data)
   sources/footstore_source.py  Optional test scraper (--footstore)
 .env.example             eBay API key template
+build.ps1                PyInstaller build script
 ```
 
 ## Requirements

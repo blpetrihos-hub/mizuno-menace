@@ -355,6 +355,19 @@ def _logo_data_uri() -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+def _logo_pixel_size() -> tuple[int, int]:
+    """Read PNG dimensions without loading the full image."""
+    logo = asset_path("logo.png")
+    if not logo.exists():
+        return 0, 0
+    with logo.open("rb") as f:
+        header = f.read(24)
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
+        return 0, 0
+    width, height = int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+    return width, height
+
+
 def dark_theme_css() -> str:
     return """
     :root {
@@ -389,6 +402,8 @@ def dark_theme_css() -> str:
       height: auto;
       max-height: 72px;
       object-fit: contain;
+      image-rendering: high-quality;
+      image-rendering: -webkit-optimize-contrast;
     }
     .brand-text {
       font-size: 1.75rem;
@@ -402,7 +417,12 @@ def dark_theme_css() -> str:
 def brand_header_html() -> str:
     logo_uri = _logo_data_uri()
     if logo_uri:
-        return f'<header class="brand"><img src="{logo_uri}" alt="Mizuno Menace"></header>'
+        w, h = _logo_pixel_size()
+        dims = f' width="{w}" height="{h}"' if w and h else ""
+        return (
+            f'<header class="brand"><img src="{logo_uri}" alt="Mizuno Menace"'
+            f'{dims} decoding="async"></header>'
+        )
     return '<header class="brand"><span class="brand-text">Mizuno Menace</span></header>'
 
 

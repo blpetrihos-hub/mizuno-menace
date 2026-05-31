@@ -1,7 +1,7 @@
 # Mizuno Menace
 
 <p align="center">
-  <img src="mizuno_menace/assets/logo.png" alt="Mizuno Menace" height="52">
+  <img src="mizuno_menace/assets/logo.png" alt="Mizuno Menace" width="480">
 </p>
 
 Compare Mizuno apparel and shoe prices across retailers and rank the top discounts vs MSRP.

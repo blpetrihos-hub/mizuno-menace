@@ -270,7 +270,8 @@ def print_best_discounts(results: list[ItemResult], console: Console, top: int =
     groups = _top_deal_groups(results, top=top)
     if not groups:
         console.print(
-            "[yellow]No deals below MSRP[/yellow] — verify MSRP values or add eBay keys."
+            "[yellow]No ranked deals found[/yellow] for this search. "
+            "Try default mode, a broader custom query, or Apparel/Shoes only with size filters."
         )
         return []
 
@@ -559,7 +560,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
       </tr>
     </thead>
     <tbody>
-      {''.join(top_rows) if top_rows else f'<tr><td colspan="7" class="muted">No deals below MSRP found.</td></tr>'}
+      {''.join(top_rows) if top_rows else '<tr><td colspan="7" class="muted">No ranked deals found for this search. Try default mode or a broader custom query.</td></tr>'}
     </tbody>
   </table>
     </div>

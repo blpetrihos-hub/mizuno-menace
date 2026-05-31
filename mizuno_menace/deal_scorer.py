@@ -13,12 +13,26 @@ from .style_extractor import normalize_style_id
 MIN_PEER_STYLE_SAMPLES = 2
 MIN_PEER_PRODUCT_SAMPLES = 3
 MIN_PEER_CATEGORY_SAMPLES = 5
+MIN_PEER_SCAN_SAMPLES = 2
+
+
+def _adaptive_min(default: int, count: int) -> int:
+    """Relax peer sample floors when a scan returns fewer listings."""
+    if count < MIN_PEER_SCAN_SAMPLES:
+        return count + 1
+    return max(MIN_PEER_SCAN_SAMPLES, min(default, count))
 
 
 def score_deals(listings: list[Listing]) -> None:
     """Fill reference + deal_index for listings using eBay peer comparables."""
     ebay = [lst for lst in listings if lst.source == "eBay"]
     if ebay:
+        n = len(ebay)
+        min_style = _adaptive_min(MIN_PEER_STYLE_SAMPLES, n)
+        min_product = _adaptive_min(MIN_PEER_PRODUCT_SAMPLES, n)
+        min_category = _adaptive_min(MIN_PEER_CATEGORY_SAMPLES, n)
+        min_scan = _adaptive_min(MIN_PEER_SCAN_SAMPLES, n)
+
         style_totals: dict[str, list[float]] = defaultdict(list)
         product_totals: dict[str, list[float]] = defaultdict(list)
         category_totals: dict[str, list[float]] = defaultdict(list)
@@ -33,9 +47,12 @@ def score_deals(listings: list[Listing]) -> None:
             kind = lst.kind or "all"
             category_totals[kind].append(lst.total)
 
-        style_median = _medians(style_totals, MIN_PEER_STYLE_SAMPLES)
-        product_median = _medians(product_totals, MIN_PEER_PRODUCT_SAMPLES)
-        category_median = _medians(category_totals, MIN_PEER_CATEGORY_SAMPLES)
+        style_median = _medians(style_totals, min_style)
+        product_median = _medians(product_totals, min_product)
+        category_median = _medians(category_totals, min_category)
+        scan_median: float | None = None
+        if n >= min_scan:
+            scan_median = round(statistics.median(lst.total for lst in ebay), 2)
         today = time.strftime("%Y-%m-%d")
 
         for lst in listings:
@@ -64,6 +81,9 @@ def score_deals(listings: list[Listing]) -> None:
             elif kind in category_median:
                 ref = category_median[kind]
                 source = "peer_category"
+            elif scan_median is not None:
+                ref = scan_median
+                source = "peer_scan"
 
             if ref is None or ref <= lst.total:
                 continue

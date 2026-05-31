@@ -95,6 +95,51 @@ def us_shoe_to_eu(us: str) -> str:
     return _US_TO_EU_SHOE.get(us, SHOE_SIZE_EU)
 
 
+_CUSTOM_SHOE_HINTS = (
+    "shoe",
+    "shoes",
+    "sneaker",
+    "cleat",
+    "spike",
+    "wave rider",
+    "wave sky",
+    "wave inspire",
+    "wave ultima",
+    "neo vista",
+    "neo cosmo",
+)
+
+_CUSTOM_APPAREL_HINTS = (
+    "jacket",
+    "shirt",
+    "tee",
+    "pant",
+    "short",
+    "hoodie",
+    "vest",
+    "gilet",
+    "apparel",
+    "jersey",
+    "top",
+    "sweatshirt",
+    "legging",
+    "tight",
+    "windbreaker",
+    "pullover",
+    "coat",
+)
+
+
+def infer_custom_kind(query: str) -> str:
+    """Guess apparel vs shoe for custom searches when scope is 'both'."""
+    q = (query or "").lower()
+    if any(h in q for h in _CUSTOM_SHOE_HINTS):
+        return "shoe"
+    if any(h in q for h in _CUSTOM_APPAREL_HINTS):
+        return "apparel"
+    return ""
+
+
 def plan_scan_searches(
     *,
     apparel_size: str = APPAREL_SIZE,
@@ -112,6 +157,11 @@ def plan_scan_searches(
         if scope == "apparel":
             return [(custom, "apparel", apparel_size)]
         if scope == "shoes":
+            return [(custom, "shoe", shoe_size_us)]
+        kind = infer_custom_kind(custom)
+        if kind == "apparel":
+            return [(custom, "apparel", apparel_size)]
+        if kind == "shoe":
             return [(custom, "shoe", shoe_size_us)]
         return [(custom, "", "")]
 

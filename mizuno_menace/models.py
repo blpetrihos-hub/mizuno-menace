@@ -100,6 +100,7 @@ class Listing:
             "peer_style": "Peer median (style)",
             "peer_product": "Peer median (product)",
             "peer_category": "Category median",
+            "peer_scan": "Scan median",
             "estimated": "Estimated MSRP",
             "watchlist": "Watchlist MSRP",
         }

@@ -18,11 +18,12 @@ from pathlib import Path
 
 import requests
 
-from ..msrp_lookup import normalize_product_name
+from ..msrp_lookup import lookup_estimated_msrp, normalize_product_name
 from ..style_extractor import resolve_style_id
 from ..models import Listing
 from ..paths import cache_dir
 from ..search_criteria import APPAREL_SIZE, SHOE_SIZE_EU, SHOE_SIZE_US
+from ..fetch_budget import MIN_PAGES_BEFORE_EARLY_STOP
 from .base import PriceSource
 
 SITEMAP_INDEX = "https://foot-store.com/sitemap.xml"
@@ -72,17 +73,22 @@ class FootStoreSource(PriceSource):
         timeout: int = 20,
         cache_path: Path | None = None,
         cache_ttl: int = 86_400,  # 24h
-        delay: float = 0.3,
+        product_cache_ttl: int = 86_400,
+        delay: float = 0.2,
     ):
         self.max_products = max_products
         self.max_candidates = max_candidates
         self.timeout = timeout
         self.cache_path = cache_path or (cache_dir() / "footstore_mizuno_urls.txt")
+        self.product_cache_path = cache_dir() / "footstore_products.json"
         self.cache_ttl = cache_ttl
+        self.product_cache_ttl = product_cache_ttl
         self.delay = delay
         self._urls: list[str] | None = None
+        self._product_cache: dict[str, dict] | None = None
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": USER_AGENT})
+        self.last_pages_scanned = 0
 
     # -- URL discovery -----------------------------------------------------
 
@@ -316,9 +322,92 @@ class FootStoreSource(PriceSource):
             return False
         return True
 
+    def _load_product_cache(self) -> dict[str, dict]:
+        if self._product_cache is not None:
+            return self._product_cache
+        self._product_cache = {}
+        if not self.product_cache_path.exists():
+            return self._product_cache
+        try:
+            payload = json.loads(self.product_cache_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return self._product_cache
+        entries = payload.get("entries", payload)
+        if isinstance(entries, dict):
+            self._product_cache = entries
+        return self._product_cache
+
+    def _save_product_cache(self) -> None:
+        cache = self._load_product_cache()
+        self.product_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"updated_at": time.time(), "entries": cache}
+        self.product_cache_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def _cached_product(self, url: str) -> tuple[Listing | None, bool, str] | None:
+        cache = self._load_product_cache()
+        row = cache.get(url)
+        if not row:
+            return None
+        try:
+            if (time.time() - float(row.get("fetched_at", 0))) > self.product_cache_ttl:
+                return None
+        except (TypeError, ValueError):
+            return None
+        if row.get("oos"):
+            return None, True, str(row.get("description", ""))
+        data = row.get("listing")
+        if not isinstance(data, dict):
+            return None
+        return (
+            Listing(
+                title=str(data.get("title", "")),
+                price=float(data["price"]),
+                currency=str(data.get("currency", "USD")),
+                source=self.name,
+                url=url,
+                condition=str(data.get("condition", "")),
+                buying_option="FIXED_PRICE",
+                color=str(data.get("color", "")),
+                style_id=str(data.get("style_id", "")),
+            ),
+            False,
+            str(row.get("description", "")),
+        )
+
+    def _store_product_cache(
+        self,
+        url: str,
+        listing: Listing | None,
+        oos: bool,
+        description: str,
+    ) -> None:
+        cache = self._load_product_cache()
+        row: dict = {
+            "fetched_at": time.time(),
+            "oos": oos,
+            "description": description,
+        }
+        if listing:
+            row["listing"] = {
+                "title": listing.title,
+                "price": listing.price,
+                "currency": listing.currency,
+                "condition": listing.condition,
+                "color": listing.color,
+                "style_id": listing.style_id,
+            }
+        cache[url] = row
+        self._product_cache = cache
+        if len(cache) % 25 == 0:
+            self._save_product_cache()
+
     # -- product parsing ---------------------------------------------------
 
     def _parse_product(self, url: str) -> tuple[Listing | None, bool, str]:
+        cached = self._cached_product(url)
+        if cached is not None:
+            return cached
+
         try:
             resp = self._session.get(url, timeout=self.timeout)
             resp.raise_for_status()
@@ -336,6 +425,7 @@ class FootStoreSource(PriceSource):
                 continue
             listing, oos, desc = self._listing_from_ld(data, url)
             if listing or oos:
+                self._store_product_cache(url, listing, oos, desc)
                 return listing, oos, desc
         return None, False, ""
 
@@ -381,6 +471,7 @@ class FootStoreSource(PriceSource):
         shoe_size_us: str = SHOE_SIZE_US,
         shoe_size_eu: str = SHOE_SIZE_EU,
         max_pages: int = 350,
+        target_products: int = 0,
         **kwargs,
     ) -> list[Listing]:
         """Scrape in-stock Mizuno deals from foot-store (no watchlist queries)."""
@@ -389,22 +480,37 @@ class FootStoreSource(PriceSource):
         )
         listings: list[Listing] = []
         seen_urls: set[str] = set()
+        seen_products: set[str] = set()
+        seen_deal_products: set[str] = set()
+        pages_scanned = 0
         for i, url in enumerate(urls):
             if i >= max_pages:
+                break
+            if (
+                target_products > 0
+                and pages_scanned >= MIN_PAGES_BEFORE_EARLY_STOP
+                and len(seen_deal_products) >= target_products
+            ):
                 break
             if url in seen_urls:
                 continue
             seen_urls.add(url)
-            if i:
+            if pages_scanned:
                 time.sleep(self.delay)
             listing, _, desc = self._parse_product(url)
+            pages_scanned += 1
             if not listing:
                 continue
-            slug = self._slug(url)
             if not self._title_is_mens(listing.title, desc):
                 continue
             listing.product_name = normalize_product_name(listing.title)
+            seen_products.add(listing.product_name)
+            est = lookup_estimated_msrp(listing.title)
+            if est and listing.total < est:
+                seen_deal_products.add(listing.product_name)
             listings.append(listing)
+        self._save_product_cache()
+        self.last_pages_scanned = pages_scanned
         self._last_oos_count = 0
         return listings
 

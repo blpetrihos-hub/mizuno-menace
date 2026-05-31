@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from .fetch_budget import (
+    effective_max_pages,
+    ebay_scan_limit,
+    target_product_count,
+)
 from .models import ItemResult, Listing, Product
-from .reference_resolver import apply_references
+from .reference_resolver import apply_references, reference_source_counts
 from .search_criteria import APPAREL_SIZE, SHOE_SIZE_EU, SHOE_SIZE_US
 from .sources.base import PriceSource
 
@@ -15,6 +20,7 @@ class Aggregator:
         self.sources = [s for s in sources if s.available]
         self.limit = limit
         self.use_aspects = use_aspects
+        self.last_scan_stats: dict = {}
 
     def search_product(self, product: Product) -> ItemResult:
         listings: list[Listing] = []
@@ -62,26 +68,45 @@ class Aggregator:
         apparel_size: str = APPAREL_SIZE,
         shoe_size_us: str = SHOE_SIZE_US,
         shoe_size_eu: str = SHOE_SIZE_EU,
-        max_pages: int = 350,
+        max_pages: int = 0,
+        top: int = 30,
     ) -> list[ItemResult]:
         """Discover deals by scraping sources; group color variants under one product."""
+        page_budget = effective_max_pages(max_pages, top)
+        product_target = target_product_count(top)
+        ebay_limit = ebay_scan_limit(top, page_budget)
+
         raw: list[Listing] = []
         for source in self.sources:
             scan = getattr(source, "scan_deals", None)
             if not scan:
                 continue
             try:
-                found = scan(
-                    apparel_size=apparel_size,
-                    shoe_size_us=shoe_size_us,
-                    shoe_size_eu=shoe_size_eu,
-                    max_pages=max_pages,
-                )
+                kwargs: dict = {
+                    "apparel_size": apparel_size,
+                    "shoe_size_us": shoe_size_us,
+                    "shoe_size_eu": shoe_size_eu,
+                    "max_pages": page_budget,
+                }
+                if source.name == "foot-store":
+                    kwargs["target_products"] = product_target
+                if source.name == "eBay":
+                    kwargs["ebay_limit"] = ebay_limit
+                found = scan(**kwargs)
             except Exception:
                 continue
             raw.extend(found)
 
         apply_references(raw)
+        self.last_scan_stats = {
+            "listings": len(raw),
+            "page_budget": page_budget,
+            "references": reference_source_counts(raw),
+        }
+        for source in self.sources:
+            pages = getattr(source, "last_pages_scanned", 0)
+            if pages:
+                self.last_scan_stats["footstore_pages"] = pages
 
         by_product: dict[str, list[Listing]] = defaultdict(list)
         for lst in raw:

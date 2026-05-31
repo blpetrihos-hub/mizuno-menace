@@ -180,6 +180,7 @@ class EbaySource(PriceSource):
         shoe_size_us: str = "11",
         shoe_size_eu: str = "45",
         max_pages: int = 350,
+        ebay_limit: int = 50,
         **kwargs,
     ) -> list[Listing]:
         from ..models import Product
@@ -193,7 +194,7 @@ class EbaySource(PriceSource):
 
         apparel_size = apparel_size or APPAREL_SIZE
         shoe_size_us = shoe_size_us or SHOE_SIZE_US
-        per_query = min(max(max_pages // 4, 25), 50)
+        per_query = ebay_limit
         listings: list[Listing] = []
         seen_urls: set[str] = set()
 

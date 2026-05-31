@@ -277,7 +277,7 @@ def print_best_discounts(results: list[ItemResult], console: Console, top: int =
     shown: list[Listing] = [lst for _, grp in groups for lst in grp]
 
     table = Table(
-        title=f"Top {top} product deals vs Mizuno MSRP",
+        title=f"Top {top} product deals vs reference price",
         show_lines=True,
     )
     table.add_column("Product", style="bold", max_width=24)
@@ -470,7 +470,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
   <div class="page">
   {brand_header_html()}
 
-  <h2>Top {top} product deals</h2>
+  <h2>Top {top} product deals vs reference price</h2>
   <table>
     <thead>
       <tr>

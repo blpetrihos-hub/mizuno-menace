@@ -11,8 +11,10 @@ from .paths import cache_dir, package_dir
 
 OFFICIAL_CACHE_FILE = "mizuno_official.json"
 CATALOG_CACHE_FILE = "catalog_msrp.json"
+MISS_CACHE_FILE = "mizuno_miss.json"
 CACHE_VERSION = 1
 OFFICIAL_TTL_SECONDS = 7 * 86_400  # weekly refresh
+MISS_TTL_SECONDS = 30 * 86_400     # don't re-fetch misses for 30 days
 
 
 @dataclass
@@ -47,8 +49,10 @@ class ReferenceCache:
         base = cache_dir()
         self.official_path = official_path or (base / OFFICIAL_CACHE_FILE)
         self.catalog_path = catalog_path or (base / CATALOG_CACHE_FILE)
+        self.miss_path = base / MISS_CACHE_FILE
         self._official: dict[str, PriceEntry] = {}
         self._catalog: dict[str, PriceEntry] = {}
+        self._miss: dict[str, float] = {}
         self._load_all()
 
     def _read_store(self, path: Path) -> dict[str, dict]:
@@ -128,7 +132,45 @@ class ReferenceCache:
     def _load_all(self) -> None:
         self._official = self._load_store(self.official_path)
         self._catalog = self._load_store(self.catalog_path)
+        self._miss = self._load_misses()
         self._load_seed_catalog()
+
+    def _load_misses(self) -> dict[str, float]:
+        if not self.miss_path.exists():
+            return {}
+        try:
+            payload = json.loads(self.miss_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+        entries = payload.get("entries", payload)
+        if not isinstance(entries, dict):
+            return {}
+        out: dict[str, float] = {}
+        for key, ts in entries.items():
+            try:
+                out[str(key).upper()] = float(ts)
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    def _write_misses(self) -> None:
+        self.miss_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": CACHE_VERSION,
+            "updated_at": time.time(),
+            "entries": self._miss,
+        }
+        self.miss_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def is_miss(self, style_id: str) -> bool:
+        ts = self._miss.get(style_id.upper())
+        if ts is None:
+            return False
+        return (time.time() - ts) < MISS_TTL_SECONDS
+
+    def put_miss(self, style_id: str) -> None:
+        self._miss[style_id.upper()] = time.time()
+        self._write_misses()
 
     def get_official(self, style_id: str) -> PriceEntry | None:
         return self._official.get(style_id.upper())

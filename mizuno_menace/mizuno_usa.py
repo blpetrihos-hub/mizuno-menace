@@ -9,6 +9,7 @@ from html import unescape
 
 import requests
 
+from .fetch_budget import MIZUNO_FETCH_DELAY, MAX_MIZUNO_FETCHES_PER_RUN
 from .reference_cache import OFFICIAL_TTL_SECONDS, PriceEntry, ReferenceCache
 from .style_extractor import (
     mizuno_product_url_from_search_href,
@@ -36,8 +37,8 @@ class MizunoUsaClient:
         self,
         cache: ReferenceCache | None = None,
         timeout: int = 20,
-        delay: float = 0.35,
-        max_fetches_per_run: int = 25,
+        delay: float = MIZUNO_FETCH_DELAY,
+        max_fetches_per_run: int = MAX_MIZUNO_FETCHES_PER_RUN,
     ):
         self.cache = cache or ReferenceCache()
         self.timeout = timeout
@@ -47,6 +48,11 @@ class MizunoUsaClient:
         self._session.headers.update({"User-Agent": USER_AGENT})
         self._fetch_count = 0
         self._last_fetch = 0.0
+        self.last_lookup_attempted = False
+
+    @property
+    def fetch_budget_exhausted(self) -> bool:
+        return self._fetch_count >= self.max_fetches_per_run
 
     def lookup(
         self,
@@ -58,17 +64,22 @@ class MizunoUsaClient:
         if not style_id:
             return None
 
+        if self.cache.is_miss(style_id):
+            return None
+
         cached = self.cache.get_official(style_id)
         if cached and cached.is_fresh(OFFICIAL_TTL_SECONDS):
             return cached
 
-        if self._fetch_count >= self.max_fetches_per_run:
+        if self.fetch_budget_exhausted:
             return cached
 
+        self.last_lookup_attempted = True
         entry = self._fetch(style_id, title_hint=title_hint)
         if entry:
             self.cache.put_official(entry)
             return entry
+        self.cache.put_miss(style_id)
         return cached
 
     def _pause(self) -> None:

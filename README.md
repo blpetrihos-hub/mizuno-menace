@@ -58,7 +58,7 @@ Optional legacy watchlist via `--watchlist` and `products.json`. Default scrape 
 | --- | --- |
 | `-t, --top` | Top product deals to show (skips settings page when set) |
 | `--no-settings` | Skip settings page; use `-t` or last saved choice (default 30) |
-| `--max-pages` | Max foot-store pages to scan (default 350) |
+| `--max-pages` | Max foot-store pages (`0` = auto from `--top`) |
 | `--watchlist` | Use `products.json` instead of scrape mode |
 | `-p, --products` | Custom watchlist JSON path |
 | `-q, --query` | One-off search term (watchlist mode) |

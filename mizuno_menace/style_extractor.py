@@ -107,3 +107,19 @@ def mizuno_product_url_from_search_href(href: str) -> str:
         href = f"https://usa.mizuno.com{href}"
     parsed = urlparse(href)
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+
+def likely_mizuno_usa_style(style_id: str) -> bool:
+    """True when a style id might exist on usa.mizuno.com (skip futile lookups)."""
+    style_id = normalize_style_id(style_id)
+    if not style_id:
+        return False
+    # US site SKUs are usually 5–7 digit numeric style numbers.
+    if style_id.isdigit() and 5 <= len(style_id) <= 7:
+        return True
+    # Foot-store / EU article numbers (e.g. 32FE9A0609, J2GBB00308) — not on US site.
+    if re.match(r"^[A-Z]{1,2}\d[A-Z0-9]{4,}$", style_id):
+        return False
+    if re.match(r"^\d{2}[A-Z]{2}[A-Z0-9]{4,}$", style_id):
+        return False
+    return False

@@ -6,11 +6,12 @@ import statistics
 import time
 from collections import defaultdict
 
+from .fetch_budget import MAX_MIZUNO_FETCHES_PER_RUN
 from .models import Listing
 from .msrp_lookup import lookup_estimated_msrp
 from .mizuno_usa import MizunoUsaClient
 from .reference_cache import PriceEntry, ReferenceCache
-from .style_extractor import normalize_style_id, resolve_style_id
+from .style_extractor import likely_mizuno_usa_style, normalize_style_id, resolve_style_id
 
 MIN_MARKET_SAMPLES = 3
 
@@ -32,49 +33,83 @@ class ReferenceResolver:
         mizuno: MizunoUsaClient | None = None,
     ):
         self.cache = cache or ReferenceCache()
-        self.mizuno = mizuno or MizunoUsaClient(cache=self.cache)
+        self.mizuno = mizuno or MizunoUsaClient(
+            cache=self.cache,
+            max_fetches_per_run=MAX_MIZUNO_FETCHES_PER_RUN,
+        )
+        self._official_by_style: dict[str, PriceEntry] = {}
+        self._catalog_by_style: dict[str, PriceEntry] = {}
 
-    def enrich_listing(self, listing: Listing) -> None:
-        """Resolve style id and tiers 1–2, 4 for a single listing."""
-        if not listing.style_id:
-            listing.style_id = resolve_style_id(
-                url=listing.url,
-                title=listing.title,
-            )
+    def finalize_listings(self, listings: list[Listing]) -> None:
+        """Run all tiers once; dedupe Mizuno fetches by style id."""
+        self._ensure_style_ids(listings)
+        self._prefetch_references(listings)
+        self._apply_cached_tiers(listings)
+        self._apply_market_references(listings)
+        self._apply_late_tiers(listings)
 
-        if listing.reference_source:
-            return
+    def _ensure_style_ids(self, listings: list[Listing]) -> None:
+        for listing in listings:
+            if not listing.style_id:
+                listing.style_id = resolve_style_id(
+                    url=listing.url,
+                    title=listing.title,
+                )
 
-        style_id = normalize_style_id(listing.style_id)
-        title_hint = listing.product_name or listing.title
+    def _prefetch_references(self, listings: list[Listing]) -> None:
+        hints: dict[str, str] = {}
+        for listing in listings:
+            style_id = normalize_style_id(listing.style_id)
+            if not style_id:
+                continue
+            hint = listing.product_name or listing.title
+            hints.setdefault(style_id, hint)
 
-        if style_id:
-            official = self.mizuno.lookup(style_id, title_hint=title_hint)
-            if official:
-                self._apply_entry(listing, official, estimated=False)
-                return
+        for style_id, hint in sorted(hints.items()):
+            cached = self.cache.get_official(style_id)
+            if cached:
+                self._official_by_style[style_id] = cached
+                continue
 
             catalog = self.cache.get_catalog(style_id)
             if catalog:
-                self._apply_entry(listing, catalog, estimated=False)
-                return
+                self._catalog_by_style[style_id] = catalog
 
-        if listing.original_price and listing.original_price > listing.total:
-            self._apply(
-                listing,
-                price=listing.original_price,
-                source="ebay_list",
-                as_of="",
-                estimated=False,
-            )
+            if not likely_mizuno_usa_style(style_id):
+                continue
+            if self.cache.is_miss(style_id):
+                continue
 
-    def finalize_listings(self, listings: list[Listing]) -> None:
-        """Run market tier, estimated fallback, and leave unknowns unranked."""
+            entry = self.mizuno.lookup(style_id, title_hint=hint)
+            if entry:
+                self._official_by_style[style_id] = entry
+
+    def _apply_cached_tiers(self, listings: list[Listing]) -> None:
         for listing in listings:
-            self.enrich_listing(listing)
+            if listing.reference_source:
+                continue
+            style_id = normalize_style_id(listing.style_id)
 
-        self._apply_market_references(listings)
+            official = self._official_by_style.get(style_id)
+            if official:
+                self._apply_entry(listing, official, estimated=False)
+                continue
 
+            catalog = self._catalog_by_style.get(style_id) or self.cache.get_catalog(style_id)
+            if catalog:
+                self._apply_entry(listing, catalog, estimated=False)
+                continue
+
+            if listing.original_price and listing.original_price > listing.total:
+                self._apply(
+                    listing,
+                    price=listing.original_price,
+                    source="ebay_list",
+                    as_of="",
+                    estimated=False,
+                )
+
+    def _apply_late_tiers(self, listings: list[Listing]) -> None:
         for listing in listings:
             if listing.reference_source:
                 continue
@@ -171,3 +206,11 @@ class ReferenceResolver:
 def apply_references(listings: list[Listing]) -> None:
     """Convenience helper used by scrape paths."""
     ReferenceResolver().finalize_listings(listings)
+
+
+def reference_source_counts(listings: list[Listing]) -> dict[str, int]:
+    counts: dict[str, int] = defaultdict(int)
+    for listing in listings:
+        key = listing.reference_source or "none"
+        counts[key] += 1
+    return dict(counts)

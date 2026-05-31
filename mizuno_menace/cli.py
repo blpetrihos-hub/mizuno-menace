@@ -107,8 +107,20 @@ def main(argv: list[str] | None = None) -> int:
     else:
         console.print(
             f"Scanning Mizuno deals (mens {APPAREL_SIZE} apparel, mens US {SHOE_SIZE_US} "
-            f"shoes) via {', '.join(s.name for s in sources)} …\n"
+            f"shoes) via {', '.join(s.name for s in sources)} …"
         )
+        cfg = load_ebay_config()
+        if cfg.is_configured:
+            from .search_criteria import EBAY_APPAREL_QUERY, EBAY_SHOE_QUERY
+            console.print(
+                f"  eBay queries: [dim]\"{EBAY_APPAREL_QUERY}\"[/dim], "
+                f"[dim]\"{EBAY_SHOE_QUERY}\"[/dim] (NWT, Buy It Now)"
+            )
+        elif not args.demo:
+            console.print(
+                "  [dim]eBay: skipped (add EBAY_CLIENT_ID / EBAY_CLIENT_SECRET to .env)[/dim]"
+            )
+        console.print()
         results = agg.scan_deals(max_pages=args.max_pages)
 
     ranked = output.print_best_discounts(results, console, top=args.top)

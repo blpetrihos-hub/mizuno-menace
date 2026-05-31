@@ -64,9 +64,14 @@ Optional legacy watchlist via `--watchlist` and `products.json`. Default scrape 
 | `--no-aspect` | Disable eBay size facets |
 | `--demo` | Offline demo data (no network) |
 
-## eBay filters
+## eBay search
 
-Each eBay request applies:
+Scrape mode runs these two Browse API queries (plus NWT/BIN filters below):
+
+- `Mizuno medium mens NWT` — mens medium apparel (`Size: M`)
+- `Mens Mizuno size 11 new` — mens shoes (`US Shoe Size: 11`)
+
+Each request also applies:
 
 - `conditionIds:{1000}` — New With Tags
 - `buyingOptions:{FIXED_PRICE}` — Buy It Now

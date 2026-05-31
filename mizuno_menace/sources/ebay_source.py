@@ -179,22 +179,37 @@ class EbaySource(PriceSource):
     ) -> list[Listing]:
         from ..models import Product
         from ..msrp_lookup import apply_msrp, normalize_product_name
-        from ..search_criteria import APPAREL_SIZE, SHOE_SIZE_US
+        from ..search_criteria import (
+            APPAREL_SIZE,
+            EBAY_APPAREL_QUERY,
+            EBAY_SHOE_QUERY,
+            SHOE_SIZE_US,
+        )
 
         apparel_size = apparel_size or APPAREL_SIZE
         shoe_size_us = shoe_size_us or SHOE_SIZE_US
-        per = min(max(max_pages // 2, 25), 50)
+        per_query = min(max(max_pages // 4, 25), 50)
         listings: list[Listing] = []
-        for kind, size in (("apparel", apparel_size), ("shoe", shoe_size_us)):
-            product = Product(name="Mizuno", query="Mizuno", kind=kind, size=size)
+        seen_urls: set[str] = set()
+
+        searches = (
+            (EBAY_APPAREL_QUERY, "apparel", apparel_size),
+            (EBAY_SHOE_QUERY, "shoe", shoe_size_us),
+        )
+        for query, kind, size in searches:
+            product = Product(name=query, query=query, kind=kind, size=size)
             category_id, aspects = product.ebay_aspects()
             found = self.search(
-                product.query,
-                limit=per,
+                query,
+                limit=per_query,
                 category_id=category_id,
                 aspects=aspects,
             )
             for lst in found:
+                if lst.url and lst.url in seen_urls:
+                    continue
+                if lst.url:
+                    seen_urls.add(lst.url)
                 apply_msrp(lst)
                 lst.product_name = normalize_product_name(lst.title)
                 if lst.discount_pct is not None and (lst.discount_pct or 0) > 0:

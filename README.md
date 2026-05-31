@@ -86,12 +86,13 @@ Each request also applies:
 
 Discounts use a tiered waterfall — the Ref column shows which source was used and when it was verified:
 
-1. **Mizuno MSRP** — live lookup from [usa.mizuno.com](https://usa.mizuno.com) by style/MPN (cached weekly)
-2. **Catalog MSRP** — local catalog cache (`%LOCALAPPDATA%\MizunoMenace\cache\catalog_msrp.json`)
-3. **Market reference** — median of ≥3 NWT retail observations for the same style
-4. **vs seller list** — eBay strikethrough / list price on the listing
-5. **Estimated MSRP** — keyword fallback (legacy rules) when nothing else matches
-6. **No reference** — listing excluded from discount ranking
+1. **Mizuno MSRP** — live lookup from [usa.mizuno.com](https://usa.mizuno.com) by US style number (cached weekly)
+2. **Mizuno EU MSRP** — live lookup from [emea.mizuno.com](https://emea.mizuno.com) by EU article number (foot-store MPN; EUR→USD conversion)
+3. **Catalog MSRP** — local catalog cache (`%LOCALAPPDATA%\MizunoMenace\cache\catalog_msrp.json`)
+4. **Market reference** — median of ≥3 NWT retail observations for the same style
+5. **vs seller list** — eBay strikethrough / list price on the listing
+6. **Estimated MSRP** — keyword fallback (legacy rules) when nothing else matches
+7. **No reference** — listing excluded from discount ranking
 
 Style IDs are extracted from foot-store MPN (JSON-LD), URL slugs, and eBay aspects.
 

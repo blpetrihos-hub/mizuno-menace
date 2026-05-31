@@ -6,17 +6,25 @@ import statistics
 import time
 from collections import defaultdict
 
-from .fetch_budget import MAX_MIZUNO_FETCHES_PER_RUN
+from .fetch_budget import MAX_MIZUNO_EU_FETCHES_PER_RUN, MAX_MIZUNO_FETCHES_PER_RUN
 from .models import Listing
+from .currency_util import to_usd
 from .msrp_lookup import lookup_estimated_msrp
+from .mizuno_eu import MizunoEuClient
 from .mizuno_usa import MizunoUsaClient
 from .reference_cache import PriceEntry, ReferenceCache
-from .style_extractor import likely_mizuno_usa_style, normalize_style_id, resolve_style_id
+from .style_extractor import (
+    likely_mizuno_eu_style,
+    likely_mizuno_usa_style,
+    normalize_style_id,
+    resolve_style_id,
+)
 
 MIN_MARKET_SAMPLES = 3
 
 SOURCE_LABELS = {
     "mizuno_official": "Mizuno MSRP",
+    "mizuno_eu": "Mizuno EU MSRP",
     "catalog": "Catalog MSRP",
     "market": "Market reference",
     "ebay_list": "vs seller list",
@@ -33,11 +41,16 @@ class ReferenceResolver:
         mizuno: MizunoUsaClient | None = None,
     ):
         self.cache = cache or ReferenceCache()
-        self.mizuno = mizuno or MizunoUsaClient(
+        self.mizuno_usa = mizuno or MizunoUsaClient(
             cache=self.cache,
             max_fetches_per_run=MAX_MIZUNO_FETCHES_PER_RUN,
         )
+        self.mizuno_eu = MizunoEuClient(
+            cache=self.cache,
+            max_fetches_per_run=MAX_MIZUNO_EU_FETCHES_PER_RUN,
+        )
         self._official_by_style: dict[str, PriceEntry] = {}
+        self._eu_by_style: dict[str, PriceEntry] = {}
         self._catalog_by_style: dict[str, PriceEntry] = {}
 
     def finalize_listings(self, listings: list[Listing]) -> None:
@@ -58,31 +71,47 @@ class ReferenceResolver:
 
     def _prefetch_references(self, listings: list[Listing]) -> None:
         hints: dict[str, str] = {}
+        currencies: dict[str, str] = {}
         for listing in listings:
             style_id = normalize_style_id(listing.style_id)
             if not style_id:
                 continue
             hint = listing.product_name or listing.title
             hints.setdefault(style_id, hint)
+            currencies.setdefault(style_id, listing.currency or "USD")
 
         for style_id, hint in sorted(hints.items()):
-            cached = self.cache.get_official(style_id)
-            if cached:
-                self._official_by_style[style_id] = cached
-                continue
+            target = currencies.get(style_id, "USD")
+
+            eu_cached = self.cache.get_eu(style_id)
+            if eu_cached:
+                self._eu_by_style[style_id] = self.mizuno_eu._for_currency(
+                    eu_cached, target
+                )
+
+            us_cached = self.cache.get_official(style_id)
+            if us_cached:
+                self._official_by_style[style_id] = us_cached
 
             catalog = self.cache.get_catalog(style_id)
             if catalog:
                 self._catalog_by_style[style_id] = catalog
 
-            if not likely_mizuno_usa_style(style_id):
-                continue
-            if self.cache.is_miss(style_id):
-                continue
+            if likely_mizuno_usa_style(style_id) and not self._official_by_style.get(style_id):
+                if not self.cache.is_miss(style_id):
+                    entry = self.mizuno_usa.lookup(style_id, title_hint=hint)
+                    if entry:
+                        self._official_by_style[style_id] = entry
 
-            entry = self.mizuno.lookup(style_id, title_hint=hint)
-            if entry:
-                self._official_by_style[style_id] = entry
+            if likely_mizuno_eu_style(style_id) and not self._eu_by_style.get(style_id):
+                if not self.cache.is_eu_miss(style_id):
+                    entry = self.mizuno_eu.lookup(
+                        style_id,
+                        title_hint=hint,
+                        target_currency=target,
+                    )
+                    if entry:
+                        self._eu_by_style[style_id] = entry
 
     def _apply_cached_tiers(self, listings: list[Listing]) -> None:
         for listing in listings:
@@ -95,9 +124,18 @@ class ReferenceResolver:
                 self._apply_entry(listing, official, estimated=False)
                 continue
 
+            eu = self._eu_by_style.get(style_id)
+            if eu:
+                self._apply_entry(listing, eu, estimated=False)
+                continue
+
             catalog = self._catalog_by_style.get(style_id) or self.cache.get_catalog(style_id)
             if catalog:
-                self._apply_entry(listing, catalog, estimated=False)
+                self._apply_entry(
+                    listing,
+                    self._entry_for_currency(catalog, listing.currency or "USD"),
+                    estimated=False,
+                )
                 continue
 
             if listing.original_price and listing.original_price > listing.total:
@@ -170,6 +208,23 @@ class ReferenceResolver:
                 as_of=today,
                 estimated=False,
             )
+
+    def _entry_for_currency(self, entry: PriceEntry, target: str) -> PriceEntry:
+        target = (target or "USD").upper()
+        if entry.currency.upper() == target:
+            return entry
+        if target == "USD" and entry.currency.upper() != "USD":
+            return PriceEntry(
+                style_id=entry.style_id,
+                msrp=to_usd(entry.msrp, entry.currency),
+                currency="USD",
+                source=entry.source,
+                label=entry.label,
+                url=entry.url,
+                title=entry.title,
+                updated_at=entry.updated_at,
+            )
+        return entry
 
     def _apply_entry(
         self,

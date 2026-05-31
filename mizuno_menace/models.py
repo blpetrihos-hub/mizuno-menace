@@ -93,6 +93,7 @@ class Listing:
     def reference_label(self) -> str:
         labels = {
             "mizuno_official": "Mizuno MSRP",
+            "mizuno_eu": "Mizuno EU MSRP",
             "catalog": "Catalog MSRP",
             "market": "Market reference",
             "ebay_list": "vs seller list",

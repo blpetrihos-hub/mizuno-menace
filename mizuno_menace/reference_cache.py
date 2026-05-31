@@ -10,8 +10,10 @@ from pathlib import Path
 from .paths import cache_dir, package_dir
 
 OFFICIAL_CACHE_FILE = "mizuno_official.json"
+EU_CACHE_FILE = "mizuno_eu.json"
 CATALOG_CACHE_FILE = "catalog_msrp.json"
 MISS_CACHE_FILE = "mizuno_miss.json"
+EU_MISS_CACHE_FILE = "mizuno_eu_miss.json"
 CACHE_VERSION = 1
 OFFICIAL_TTL_SECONDS = 7 * 86_400  # weekly refresh
 MISS_TTL_SECONDS = 30 * 86_400     # don't re-fetch misses for 30 days
@@ -48,11 +50,15 @@ class ReferenceCache:
     ):
         base = cache_dir()
         self.official_path = official_path or (base / OFFICIAL_CACHE_FILE)
+        self.eu_path = base / EU_CACHE_FILE
         self.catalog_path = catalog_path or (base / CATALOG_CACHE_FILE)
         self.miss_path = base / MISS_CACHE_FILE
+        self.eu_miss_path = base / EU_MISS_CACHE_FILE
         self._official: dict[str, PriceEntry] = {}
+        self._eu: dict[str, PriceEntry] = {}
         self._catalog: dict[str, PriceEntry] = {}
         self._miss: dict[str, float] = {}
+        self._eu_miss: dict[str, float] = {}
         self._load_all()
 
     def _read_store(self, path: Path) -> dict[str, dict]:
@@ -131,15 +137,17 @@ class ReferenceCache:
 
     def _load_all(self) -> None:
         self._official = self._load_store(self.official_path)
+        self._eu = self._load_store(self.eu_path)
         self._catalog = self._load_store(self.catalog_path)
-        self._miss = self._load_misses()
+        self._miss = self._load_misses(self.miss_path)
+        self._eu_miss = self._load_misses(self.eu_miss_path)
         self._load_seed_catalog()
 
-    def _load_misses(self) -> dict[str, float]:
-        if not self.miss_path.exists():
+    def _load_misses(self, path: Path) -> dict[str, float]:
+        if not path.exists():
             return {}
         try:
-            payload = json.loads(self.miss_path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             return {}
         entries = payload.get("entries", payload)
@@ -153,24 +161,54 @@ class ReferenceCache:
                 continue
         return out
 
-    def _write_misses(self) -> None:
-        self.miss_path.parent.mkdir(parents=True, exist_ok=True)
+    def _write_misses(self, path: Path, misses: dict[str, float]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "version": CACHE_VERSION,
             "updated_at": time.time(),
-            "entries": self._miss,
+            "entries": misses,
         }
-        self.miss_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def is_miss(self, style_id: str) -> bool:
-        ts = self._miss.get(style_id.upper())
+        return self._is_miss(self._miss, style_id)
+
+    def is_eu_miss(self, style_id: str) -> bool:
+        return self._is_miss(self._eu_miss, style_id)
+
+    @staticmethod
+    def _is_miss(store: dict[str, float], style_id: str) -> bool:
+        ts = store.get(style_id.upper())
         if ts is None:
             return False
         return (time.time() - ts) < MISS_TTL_SECONDS
 
     def put_miss(self, style_id: str) -> None:
         self._miss[style_id.upper()] = time.time()
-        self._write_misses()
+        self._write_misses(self.miss_path, self._miss)
+
+    def put_eu_miss(self, style_id: str) -> None:
+        key = style_id.upper()
+        self._eu_miss[key] = time.time()
+        self._write_misses(self.eu_miss_path, self._eu_miss)
+        stale = self._catalog.get(key)
+        if stale and stale.source == "mizuno_eu":
+            del self._catalog[key]
+            self._write_store(self.catalog_path, self._catalog)
+
+    def get_eu(self, style_id: str) -> PriceEntry | None:
+        return self._eu.get(style_id.upper())
+
+    def put_eu(self, entry: PriceEntry) -> None:
+        key = entry.style_id.upper()
+        if key not in entry.url.upper():
+            return
+        entry.source = "mizuno_eu"
+        entry.label = "Mizuno EU MSRP"
+        self._eu[key] = entry
+        self._catalog.setdefault(key, entry)
+        self._write_store(self.eu_path, self._eu)
+        self._write_store(self.catalog_path, self._catalog)
 
     def get_official(self, style_id: str) -> PriceEntry | None:
         return self._official.get(style_id.upper())

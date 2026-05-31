@@ -10,6 +10,7 @@ PAGES_PER_TOP_DEAL = 7         # top 30 → ~210 pages auto
 
 # Mizuno USA official price lookups (network)
 MAX_MIZUNO_FETCHES_PER_RUN = 12
+MAX_MIZUNO_EU_FETCHES_PER_RUN = 12
 MIZUNO_FETCH_DELAY = 0.25
 
 # eBay Browse API (per query in scrape mode)

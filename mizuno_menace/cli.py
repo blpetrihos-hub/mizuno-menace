@@ -49,7 +49,7 @@ def load_input_products(args: argparse.Namespace) -> list | None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="mizuno-menace",
+        prog="Mizuno Menace",
         description="Scrape Mizuno deals and rank the top discounts vs MSRP.",
     )
     parser.add_argument(

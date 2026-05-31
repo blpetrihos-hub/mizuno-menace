@@ -77,6 +77,7 @@ class Aggregator:
         ebay_limit = ebay_scan_limit(top, page_budget)
 
         raw: list[Listing] = []
+        scan_errors: list[str] = []
         for source in self.sources:
             scan = getattr(source, "scan_deals", None)
             if not scan:
@@ -93,7 +94,8 @@ class Aggregator:
                 if source.name == "eBay":
                     kwargs["ebay_limit"] = ebay_limit
                 found = scan(**kwargs)
-            except Exception:
+            except Exception as exc:
+                scan_errors.append(f"{source.name}: {exc}")
                 continue
             raw.extend(found)
 
@@ -101,7 +103,9 @@ class Aggregator:
         self.last_scan_stats = {
             "listings": len(raw),
             "page_budget": page_budget,
+            "ebay_limit": ebay_limit,
             "references": reference_source_counts(raw),
+            "errors": scan_errors,
         }
         for source in self.sources:
             pages = getattr(source, "last_pages_scanned", 0)
@@ -109,11 +113,16 @@ class Aggregator:
                 self.last_scan_stats["footstore_pages"] = pages
 
         by_product: dict[str, list[Listing]] = defaultdict(list)
+        skipped = 0
         for lst in raw:
             if (lst.discount_pct or 0) <= 0:
+                skipped += 1
                 continue
             key = lst.product_name or lst.title
             by_product[key].append(lst)
+
+        self.last_scan_stats["products_ranked"] = len(by_product)
+        self.last_scan_stats["skipped_no_discount"] = skipped
 
         results: list[ItemResult] = []
         for name, listings in by_product.items():
@@ -121,4 +130,8 @@ class Aggregator:
             results.append(
                 ItemResult(query=name, product_name=name, listings=listings)
             )
+        results.sort(
+            key=lambda r: (r.best_discount.discount_pct if r.best_discount else 0),
+            reverse=True,
+        )
         return results

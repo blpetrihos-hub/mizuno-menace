@@ -8,6 +8,7 @@ import time
 import requests
 
 from .currency_util import to_usd
+from .fetch_budget import MAX_MIZUNO_EU_FETCHES_PER_RUN
 from .reference_cache import OFFICIAL_TTL_SECONDS, PriceEntry, ReferenceCache
 from .style_extractor import normalize_style_id
 
@@ -28,7 +29,7 @@ class MizunoEuClient:
         cache: ReferenceCache | None = None,
         timeout: int = 20,
         delay: float = 0.25,
-        max_fetches_per_run: int = 12,
+        max_fetches_per_run: int = MAX_MIZUNO_EU_FETCHES_PER_RUN,
     ):
         self.cache = cache or ReferenceCache()
         self.timeout = timeout

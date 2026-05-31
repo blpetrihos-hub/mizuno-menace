@@ -12,7 +12,7 @@ from . import output
 from .aggregator import Aggregator
 from .config import load_ebay_config
 from .launcher import load_last_top, prompt_top_count, save_last_top
-from .fetch_budget import DEFAULT_MAX_PAGES, effective_max_pages
+from .fetch_budget import DEFAULT_MAX_PAGES, DEFAULT_SOURCE_LIMIT, effective_max_pages
 from .paths import find_config, user_data_dir
 from .products import load_products, products_from_queries
 from .search_criteria import APPAREL_SIZE, SHOE_SIZE_US
@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Use products.json watchlist instead of scraping all Mizuno deals.",
     )
     parser.add_argument("-q", "--query", action="append", default=[])
-    parser.add_argument("-n", "--limit", type=int, default=25)
+    parser.add_argument("-n", "--limit", type=int, default=DEFAULT_SOURCE_LIMIT)
     parser.add_argument("-t", "--top", type=int, default=None,
                         help="Top product deals to show (default: pick on settings page).")
     parser.add_argument(
@@ -134,7 +134,8 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif not args.demo:
             console.print(
-                "  [dim]eBay: skipped (add EBAY_CLIENT_ID / EBAY_CLIENT_SECRET to .env)[/dim]"
+                "  [dim]eBay: skipped — copy .env.example to .env and add "
+                "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET (ready when keys arrive)[/dim]"
             )
         console.print()
         page_budget = effective_max_pages(args.max_pages, top)
@@ -143,6 +144,12 @@ def main(argv: list[str] | None = None) -> int:
                 f"  [dim]Scan budget: up to {page_budget} foot-store pages "
                 f"(auto from {top} deals)[/dim]"
             )
+            if cfg.is_configured:
+                from .fetch_budget import ebay_scan_limit
+                el = ebay_scan_limit(top, page_budget)
+                console.print(
+                    f"  [dim]eBay budget: up to {el} results per query (2 queries)[/dim]"
+                )
         results = agg.scan_deals(max_pages=args.max_pages, top=top)
         stats = getattr(agg, "last_scan_stats", {})
         if stats:
@@ -157,6 +164,16 @@ def main(argv: list[str] | None = None) -> int:
             )
             if ref_bits:
                 console.print(f"  [dim]Reference tiers: {ref_bits}[/dim]")
+            ranked = stats.get("products_ranked")
+            skipped = stats.get("skipped_no_discount")
+            if ranked is not None:
+                console.print(
+                    f"  [dim]{ranked} product(s) ranked"
+                    + (f", {skipped} listing(s) without discount" if skipped else "")
+                    + "[/dim]"
+                )
+            for err in stats.get("errors", []):
+                console.print(f"  [yellow]{err}[/yellow]")
         console.print()
 
     ranked = output.print_best_discounts(results, console, top=top)

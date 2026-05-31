@@ -23,7 +23,11 @@ from ..style_extractor import resolve_style_id
 from ..models import Listing
 from ..paths import cache_dir
 from ..search_criteria import APPAREL_SIZE, SHOE_SIZE_EU, SHOE_SIZE_US
-from ..fetch_budget import MIN_PAGES_BEFORE_EARLY_STOP
+from ..fetch_budget import (
+    MAX_FOOTSTORE_CANDIDATES,
+    MAX_FOOTSTORE_PRODUCTS,
+    MIN_PAGES_BEFORE_EARLY_STOP,
+)
 from .base import PriceSource
 
 SITEMAP_INDEX = "https://foot-store.com/sitemap.xml"
@@ -68,8 +72,8 @@ class FootStoreSource(PriceSource):
 
     def __init__(
         self,
-        max_products: int = 6,
-        max_candidates: int = 40,
+        max_products: int = MAX_FOOTSTORE_PRODUCTS,
+        max_candidates: int = MAX_FOOTSTORE_CANDIDATES,
         timeout: int = 20,
         cache_path: Path | None = None,
         cache_ttl: int = 86_400,  # 24h

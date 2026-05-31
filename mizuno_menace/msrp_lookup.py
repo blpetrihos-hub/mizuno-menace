@@ -47,25 +47,29 @@ _MSRP_RULES: list[tuple[tuple[str, ...], float]] = [
     (("fz", "hooded"), 65.0),
     (("hooded", "sweatshirt"), 70.0),
     (("sweatshirt", "high", "neck"), 80.0),
-    (("sweatshirt"), 70.0),
+    (("sweatshirt",), 70.0),
     (("jogging", "trouser"), 65.0),
+    (("jogging", "trousers"), 65.0),
     (("training", "jogger"), 65.0),
+    (("training", "trousers"), 55.0),
+    (("training", "trouser"), 55.0),
     (("trad", "jacket"), 120.0),
     (("trad", "trouser"), 55.0),
     (("padded", "jacket"), 150.0),
     (("hybrid", "jacket"), 150.0),
-    (("jacket"), 120.0),
+    (("jacket",), 120.0),
     (("half", "zip"), 90.0),
-    (("t shirt"), 50.0),
+    (("nara", "tee"), 45.0),
+    (("t shirt",), 50.0),
     (("tank", "top"), 35.0),
-    (("tee"), 35.0),
-    (("shirt"), 50.0),
-    (("shorts"), 45.0),
-    (("legging"), 85.0),
-    (("tights"), 100.0),
-    (("tight"), 100.0),
+    (("tee",), 35.0),
+    (("shirt",), 50.0),
+    (("shorts",), 45.0),
+    (("legging",), 85.0),
+    (("tights",), 100.0),
+    (("tight",), 100.0),
     (("running", "shoes"), 130.0),
-    (("trainers"), 130.0),
+    (("trainers",), 130.0),
     (("wave", "knit"), 130.0),
     (("wave", "serene"), 120.0),
     (("wave", "mujin"), 150.0),
@@ -93,6 +97,18 @@ def normalize_product_name(title: str) -> str:
     return " ".join(w.capitalize() for w in key.split()) or title.strip()
 
 
+def _matches_keywords(text: str, keywords: tuple[str, ...]) -> bool:
+    """Match keyword rules on normalized title tokens (not per-character)."""
+    if not keywords:
+        return False
+    if len(keywords) == 1:
+        kw = keywords[0]
+        if " " in kw:
+            return kw in text
+        return kw in text.split()
+    return all(k in text for k in keywords)
+
+
 def lookup_estimated_msrp(title: str) -> float | None:
     """Keyword-based MSRP estimate (lowest-confidence fallback tier)."""
     text = _title_key(title)
@@ -100,7 +116,7 @@ def lookup_estimated_msrp(title: str) -> float | None:
         return None
     best: tuple[int, float] | None = None
     for keywords, msrp in _MSRP_RULES:
-        if all(k in text for k in keywords):
+        if _matches_keywords(text, keywords):
             score = len(keywords)
             if best is None or score > best[0]:
                 best = (score, msrp)

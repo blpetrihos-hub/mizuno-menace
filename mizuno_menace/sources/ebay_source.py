@@ -17,6 +17,7 @@ import time
 import requests
 
 from ..config import EbayConfig, load_ebay_config
+from ..fetch_budget import MAX_EBAY_RESULTS
 from ..models import Listing
 from ..style_extractor import resolve_style_id
 from .base import PriceSource
@@ -117,7 +118,7 @@ class EbaySource(PriceSource):
         aspects = kwargs.get("aspects") or {}
 
         token = self._get_token()
-        params: dict[str, str | int] = {"q": query, "limit": min(limit, 50)}
+        params: dict[str, str | int] = {"q": query, "limit": min(limit, MAX_EBAY_RESULTS)}
         flt = self._build_filter()
         if flt:
             params["filter"] = flt

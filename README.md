@@ -43,14 +43,14 @@ Output: `dist\MizunoMenace.exe`
 
 ## Configuration
 
-Copy `.env.example` to `.env` and add eBay credentials when ready — that is the only setup required to enable eBay results:
+Copy `.env.example` to `.env` and add eBay credentials when ready — that is the only setup required to enable eBay results. The tool auto-detects keys and merges eBay listings with foot-store in scrape mode.
 
 ```
 EBAY_CLIENT_ID=...
 EBAY_CLIENT_SECRET=...
 ```
 
-Foot-store scraping works without any API keys.
+Foot-store scraping works without any API keys. Scan depth defaults are tuned via `FETCH_DEPTH_MULTIPLIER` in `fetch_budget.py` (currently 1.5× base limits).
 
 Optional legacy watchlist via `--watchlist` and `products.json`. Default scrape filters: **mens M apparel**, **mens US 11 shoes**.
 
@@ -100,17 +100,22 @@ Style IDs are extracted from foot-store MPN (JSON-LD), URL slugs, and eBay aspec
 
 ```
 mizuno_menace/
-  cli.py              Entry point and argument parsing
-  aggregator.py       Runs sources per product
+  cli.py                 Entry point and argument parsing
+  launcher.py            Settings page (deal count picker)
+  aggregator.py          Runs sources and ranks deals
+  fetch_budget.py        Adaptive scan depth limits
   reference_resolver.py  Tiered MSRP / reference-price waterfall
-  mizuno_usa.py       Official Mizuno USA price scraper + cache
-  style_extractor.py  MPN / style id from URLs and eBay aspects
-  output.py           Tables, HTML report, exports
+  mizuno_usa.py          Official Mizuno USA price lookup + cache
+  mizuno_eu.py           Official Mizuno EMEA price lookup + cache
+  currency_util.py       EUR/GBP → USD for discount math
+  style_extractor.py     MPN / style id from URLs and eBay aspects
+  output.py              Tables, HTML report, exports
   sources/
-    ebay_source.py    eBay Browse API
-    footstore_source.py
-    demo_source.py    Offline demo data
-products.json         Product list (optional)
+    ebay_source.py       eBay Browse API (NWT, Buy It Now)
+    footstore_source.py  foot-store.com sitemap scraper
+    demo_source.py       Offline demo data (--demo)
+products.json            Optional legacy watchlist (empty by default)
+.env.example             eBay API key template — copy to .env
 ```
 
 ## Requirements

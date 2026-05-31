@@ -11,7 +11,11 @@ from rich.console import Console
 from . import output
 from .aggregator import Aggregator
 from .config import ebay_setup_hint, load_ebay_config
-from .launcher import prompt_scan_settings
+from .launcher import (
+    notify_scan_complete,
+    prompt_scan_settings,
+    shutdown_launcher_server,
+)
 from .scan_settings import ScanSettings, load_scan_settings, save_scan_settings
 from .fetch_budget import DEFAULT_MAX_PAGES, DEFAULT_SOURCE_LIMIT, effective_max_pages
 from .paths import find_config, user_data_dir
@@ -104,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     console = Console(force_terminal=True)
 
     saved = load_scan_settings()
+    used_launcher = False
     if args.top is not None:
         scan_settings = ScanSettings(
             top=args.top,
@@ -116,7 +121,27 @@ def main(argv: list[str] | None = None) -> int:
         scan_settings = saved
     else:
         scan_settings = prompt_scan_settings(saved)
+        used_launcher = True
     save_scan_settings(scan_settings)
+    top = scan_settings.top
+    apparel_size = scan_settings.apparel_size
+    shoe_size_us = scan_settings.shoe_size_us
+    shoe_size_eu = us_shoe_to_eu(shoe_size_us)
+    search_scope = scan_settings.search_scope
+    custom_query = scan_settings.custom_query
+
+    exit_code = 0
+    try:
+        exit_code = _run_scan(args, console, scan_settings)
+    finally:
+        if used_launcher:
+            notify_scan_complete()
+            shutdown_launcher_server()
+
+    return exit_code
+
+
+def _run_scan(args: argparse.Namespace, console: Console, scan_settings: ScanSettings) -> int:
     top = scan_settings.top
     apparel_size = scan_settings.apparel_size
     shoe_size_us = scan_settings.shoe_size_us

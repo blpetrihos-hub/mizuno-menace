@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import html
+import json
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from .output import _vertical_brand_aside, brand_header_html, dark_theme_css
 from .scan_settings import (
@@ -22,6 +24,9 @@ from .search_criteria import (
 )
 
 SETTINGS_PORT = 8765
+
+_settings_server: HTTPServer | None = None
+_scan_complete = False
 
 
 def top_explicitly_set(argv: list[str] | None = None) -> bool:
@@ -335,28 +340,86 @@ def _waiting_html() -> str:
   <div class="page" style="text-align:center;padding-top:3rem;">
     {brand_header_html()}
     <p style="color:#cccccc;">Scanning Mizuno deals… this may take a few minutes.</p>
-    <p style="color:#858585;font-size:0.9rem;">Keep this window open — your deal report will open when the scan finishes.</p>
+    <p style="color:#858585;font-size:0.9rem;">Your deal report will open when the scan finishes. This window will close automatically.</p>
   </div>
+  <script>
+    async function pollScanStatus() {{
+      try {{
+        const response = await fetch('/status');
+        if (!response.ok) {{
+          setTimeout(pollScanStatus, 1500);
+          return;
+        }}
+        const data = await response.json();
+        if (data.complete) {{
+          window.close();
+          document.body.innerHTML =
+            '<div class="page" style="text-align:center;padding-top:3rem;">'
+            + '<p style="color:#858585;">Scan complete.</p></div>';
+          setTimeout(function() {{ window.close(); }}, 800);
+          return;
+        }}
+      }} catch (err) {{
+        /* server may still be starting */
+      }}
+      setTimeout(pollScanStatus, 1500);
+    }}
+    pollScanStatus();
+  </script>
 </body>
 </html>
 """
 
 
+def notify_scan_complete() -> None:
+    """Tell the waiting page the scan finished so it can close."""
+    global _scan_complete
+    _scan_complete = True
+
+
+def shutdown_launcher_server(*, wait_ms: int = 2500) -> None:
+    """Stop the local settings server after the browser has time to close."""
+    global _settings_server, _scan_complete
+    if _settings_server is None:
+        return
+    if wait_ms > 0:
+        time.sleep(wait_ms / 1000)
+    _settings_server.shutdown()
+    _settings_server = None
+    _scan_complete = False
+
+
+def launcher_server_active() -> bool:
+    return _settings_server is not None
+
+
 def prompt_scan_settings(default: ScanSettings | None = None) -> ScanSettings:
     """Open the settings page and block until the user submits scan preferences."""
+    global _settings_server, _scan_complete
+
     default = (default or ScanSettings()).normalized()
     choice: dict[str, ScanSettings | None] = {"settings": None}
-    done = threading.Event()
+    settings_received = threading.Event()
+    _scan_complete = False
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):  # noqa: A002
             return
 
         def do_GET(self) -> None:  # noqa: N802
-            if self.path in ("/", "/index.html"):
+            path = urlparse(self.path).path
+            if path in ("/", "/index.html"):
                 body = _settings_html(default).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif path == "/status":
+                body = json.dumps({"complete": _scan_complete}).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -364,7 +427,7 @@ def prompt_scan_settings(default: ScanSettings | None = None) -> ScanSettings:
                 self.send_error(404)
 
         def do_POST(self) -> None:  # noqa: N802
-            if self.path != "/scan":
+            if urlparse(self.path).path != "/scan":
                 self.send_error(404)
                 return
             length = int(self.headers.get("Content-Length", 0))
@@ -392,14 +455,17 @@ def prompt_scan_settings(default: ScanSettings | None = None) -> ScanSettings:
             self.send_header("Content-Length", str(len(waiting)))
             self.end_headers()
             self.wfile.write(waiting)
-            done.set()
+            settings_received.set()
+
+    if _settings_server is not None:
+        shutdown_launcher_server(wait_ms=0)
 
     server = HTTPServer(("127.0.0.1", SETTINGS_PORT), Handler)
+    _settings_server = server
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     webbrowser.open(f"http://127.0.0.1:{SETTINGS_PORT}/")
-    done.wait()
-    server.shutdown()
+    settings_received.wait()
     return choice["settings"] or default
 
 

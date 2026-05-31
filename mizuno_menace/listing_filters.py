@@ -55,13 +55,15 @@ _GOLF_WORD = re.compile(
     re.IGNORECASE,
 )
 
+_BATTING_HITTING = re.compile(r"\b(batting|hitting)\b", re.IGNORECASE)
+
 _BASEBALL_GEAR = re.compile(
     r"\b("
+    r"batting|"
+    r"hitting|"
     r"baseball|"
     r"softball|"
     r"fastpitch|"
-    r"batting|"
-    r"hitting|"
     r"batting\s+gloves?|"
     r"batting\s+tee|"
     r"baseball\s+gloves?|"
@@ -177,7 +179,8 @@ def is_golf_listing(text: str) -> bool:
 
 
 def is_baseball_listing(text: str) -> bool:
-    return bool(_BASEBALL_GEAR.search(text or ""))
+    text = text or ""
+    return bool(_BATTING_HITTING.search(text) or _BASEBALL_GEAR.search(text))
 
 
 def is_field_sport_listing(text: str) -> bool:
@@ -211,14 +214,14 @@ def exclusion_reason(lst: Listing) -> str | None:
         return "womens"
     if is_youth_listing(text):
         return "youth"
+    if is_baseball_listing(text):
+        return "baseball"
     if is_cleats_listing(text):
         return "cleats"
     if is_unisex_listing(text):
         return "unisex"
     if is_golf_listing(text):
         return "golf"
-    if is_baseball_listing(text):
-        return "baseball"
     if is_field_sport_listing(text):
         return "field_sport"
     if is_junk_merch_listing(text):

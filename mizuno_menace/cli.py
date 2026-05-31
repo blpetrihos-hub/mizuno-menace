@@ -27,10 +27,10 @@ def build_sources(use_demo: bool, force_demo: bool, use_footstore: bool) -> list
     sources: list = []
     if cfg.is_configured:
         sources.append(EbaySource(cfg))
+    elif use_demo:
+        sources.append(DemoSource())
     if use_footstore:
         sources.append(FootStoreSource())
-    if not sources and use_demo:
-        sources.append(DemoSource())
     return sources
 
 
@@ -51,7 +51,7 @@ def load_input_products(args: argparse.Namespace) -> list | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="Mizuno Menace",
-        description="Scrape Mizuno deals and rank the top discounts vs MSRP.",
+        description="Find Mizuno NWT deals on eBay ranked by deal index vs market peers.",
     )
     parser.add_argument(
         "-p", "--products", type=Path, default=None,
@@ -82,7 +82,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--demo", action="store_true", help="Use offline demo data.")
     parser.add_argument("--sample", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--no-fallback", action="store_true")
-    parser.add_argument("--no-footstore", action="store_true")
+    parser.add_argument(
+        "--footstore",
+        action="store_true",
+        help="Also scan foot-store.com (dev/test; eBay is the primary source).",
+    )
+    parser.add_argument(
+        "--no-footstore",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument("--no-aspect", action="store_true")
     args = parser.parse_args(argv)
 
@@ -99,10 +108,11 @@ def main(argv: list[str] | None = None) -> int:
         top = prompt_top_count(load_last_top())
     save_last_top(top)
 
+    use_footstore = args.footstore and not args.demo
     sources = build_sources(
         use_demo=not args.no_fallback,
         force_demo=args.demo,
-        use_footstore=not args.no_footstore and not args.demo,
+        use_footstore=use_footstore,
     )
     if not sources:
         console.print("[red]No data sources available.[/red] Add eBay keys or use --demo.")
@@ -122,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
         results = agg.search_all(products)
     else:
         console.print(
-            f"Scanning Mizuno deals (mens {APPAREL_SIZE} apparel, mens US {SHOE_SIZE_US} "
+            f"Scanning Mizuno eBay deals (mens {APPAREL_SIZE} apparel, mens US {SHOE_SIZE_US} "
             f"shoes) via {', '.join(s.name for s in sources)} …"
         )
         cfg = load_ebay_config()
@@ -139,17 +149,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         console.print()
         page_budget = effective_max_pages(args.max_pages, top)
-        if args.max_pages == DEFAULT_MAX_PAGES:
+        if cfg.is_configured or args.demo:
+            from .fetch_budget import ebay_scan_limit
+            el = ebay_scan_limit(top, page_budget)
             console.print(
-                f"  [dim]Scan budget: up to {page_budget} foot-store pages "
-                f"(auto from {top} deals)[/dim]"
+                f"  [dim]eBay budget: up to {el} results per query (2 queries)[/dim]"
             )
-            if cfg.is_configured:
-                from .fetch_budget import ebay_scan_limit
-                el = ebay_scan_limit(top, page_budget)
-                console.print(
-                    f"  [dim]eBay budget: up to {el} results per query (2 queries)[/dim]"
-                )
+        if use_footstore:
+            console.print(
+                f"  [dim]foot-store budget: up to {page_budget} pages (test source)[/dim]"
+            )
         results = agg.scan_deals(max_pages=args.max_pages, top=top)
         stats = getattr(agg, "last_scan_stats", {})
         if stats:
@@ -157,10 +166,10 @@ def main(argv: list[str] | None = None) -> int:
             ref_bits = ", ".join(
                 f"{k}: {v}" for k, v in sorted(refs.items()) if v
             )
-            pages = stats.get("footstore_pages", stats.get("page_budget", ""))
+            pages = stats.get("footstore_pages")
+            extra = f", {pages} foot-store pages" if pages else ""
             console.print(
-                f"  [dim]Fetched {stats.get('listings', 0)} listings "
-                f"({pages} foot-store pages)[/dim]"
+                f"  [dim]Fetched {stats.get('listings', 0)} listings{extra}[/dim]"
             )
             if ref_bits:
                 console.print(f"  [dim]Reference tiers: {ref_bits}[/dim]")

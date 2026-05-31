@@ -10,6 +10,7 @@ from .fetch_budget import (
     target_product_count,
 )
 from .models import ItemResult, Listing, Product
+from .deal_scorer import score_deals
 from .reference_resolver import apply_references, reference_source_counts
 from .search_criteria import APPAREL_SIZE, SHOE_SIZE_EU, SHOE_SIZE_US
 from .sources.base import PriceSource
@@ -45,7 +46,8 @@ class Aggregator:
             listings.extend(found)
 
         listings.sort(key=lambda lst: lst.total)
-        apply_references(listings)
+        apply_references(listings, allow_estimated=True)
+        score_deals(listings)
         result = ItemResult(query=product.query, product_name=product.name, listings=listings)
         if errors and not listings:
             result.error = "; ".join(errors)
@@ -99,7 +101,8 @@ class Aggregator:
                 continue
             raw.extend(found)
 
-        apply_references(raw)
+        apply_references(raw, allow_estimated=False)
+        score_deals(raw)
         self.last_scan_stats = {
             "listings": len(raw),
             "page_budget": page_budget,
@@ -115,10 +118,11 @@ class Aggregator:
         by_product: dict[str, list[Listing]] = defaultdict(list)
         skipped = 0
         for lst in raw:
-            if (lst.discount_pct or 0) <= 0:
+            idx = lst.deal_index if lst.deal_index is not None else lst.discount_pct
+            if (idx or 0) <= 0:
                 skipped += 1
                 continue
-            key = lst.product_name or lst.title
+            key = lst.product_name or lst.style_id or lst.title
             by_product[key].append(lst)
 
         self.last_scan_stats["products_ranked"] = len(by_product)
@@ -131,7 +135,11 @@ class Aggregator:
                 ItemResult(query=name, product_name=name, listings=listings)
             )
         results.sort(
-            key=lambda r: (r.best_discount.discount_pct if r.best_discount else 0),
+            key=lambda r: (
+                (r.best_deal.deal_index or r.best_deal.discount_pct or 0)
+                if r.best_deal
+                else 0
+            ),
             reverse=True,
         )
         return results

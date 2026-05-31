@@ -166,6 +166,7 @@ class EbaySource(PriceSource):
                     buying_option=_buying_option(item),
                     original_price=_original_price(item),
                     color=_aspect_color(item),
+                    kind=kwargs.get("kind", ""),
                     style_id=resolve_style_id(
                         ebay_aspects=item.get("localizedAspects") or [],
                         title=item.get("title", "").strip(),
@@ -211,6 +212,7 @@ class EbaySource(PriceSource):
                 limit=per_query,
                 category_id=category_id,
                 aspects=aspects,
+                kind=kind,
             )
             for lst in found:
                 if lst.url and lst.url in seen_urls:

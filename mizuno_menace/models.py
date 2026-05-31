@@ -65,13 +65,14 @@ class Listing:
     buying_option: str = ""
     color: str = ""
     style_id: str = ""
+    kind: str = ""  # apparel | shoe — set by eBay scan
     # Reference prices for discount math:
     msrp: Optional[float] = None
     original_price: Optional[float] = None  # eBay seller's list/strikethrough
-    reference_source: str = ""   # mizuno_official, catalog, market, ebay_list, estimated
-    reference_as_of: str = ""      # YYYY-MM-DD when reference was verified
-    estimated: bool = False        # True for keyword-rule fallback tier
-    # Filled in when grouped under a product:
+    reference_source: str = ""
+    reference_as_of: str = ""
+    estimated: bool = False
+    deal_index: Optional[float] = None  # indexable % below reference (primary rank key)
     product_name: str = ""
 
     @property
@@ -95,8 +96,10 @@ class Listing:
             "mizuno_official": "Mizuno MSRP",
             "mizuno_eu": "Mizuno EU MSRP",
             "catalog": "Catalog MSRP",
-            "market": "Market reference",
             "ebay_list": "vs seller list",
+            "peer_style": "Peer median (style)",
+            "peer_product": "Peer median (product)",
+            "peer_category": "Category median",
             "estimated": "Estimated MSRP",
             "watchlist": "Watchlist MSRP",
         }
@@ -120,6 +123,8 @@ class Listing:
 
     @property
     def discount_pct(self) -> Optional[float]:
+        if self.deal_index is not None:
+            return self.deal_index
         ref = self.reference_price
         if ref is None or ref <= 0:
             return None
@@ -174,9 +179,16 @@ class ItemResult:
         return min(self.listings, key=lambda lst: lst.total)
 
     @property
-    def best_discount(self) -> Optional[Listing]:
-        """Listing with the highest discount vs its reference price."""
-        scored = [lst for lst in self.listings if lst.discount_pct is not None]
+    def best_deal(self) -> Optional[Listing]:
+        """Listing with the highest deal index in this group."""
+        scored = [lst for lst in self.listings if lst.deal_index is not None]
+        if not scored:
+            scored = [lst for lst in self.listings if lst.discount_pct is not None]
         if not scored:
             return None
-        return max(scored, key=lambda lst: lst.discount_pct)
+        return max(scored, key=lambda lst: lst.deal_index or lst.discount_pct or 0)
+
+    @property
+    def best_discount(self) -> Optional[Listing]:
+        """Backward-compatible alias for best_deal."""
+        return self.best_deal

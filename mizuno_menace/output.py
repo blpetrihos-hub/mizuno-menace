@@ -277,7 +277,7 @@ def print_best_discounts(results: list[ItemResult], console: Console, top: int =
     shown: list[Listing] = [lst for _, grp in groups for lst in grp]
 
     table = Table(
-        title=f"Top {top} product deals vs reference price",
+        title=f"Top {top} deals by deal index",
         show_lines=True,
     )
     table.add_column("Product", style="bold", max_width=24)
@@ -490,7 +490,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
   <div class="page">
   {brand_header_html()}
 
-  <h2>Top {top} product deals vs reference price</h2>
+  <h2>Top {top} deals by deal index</h2>
   <table>
     <thead>
       <tr>
@@ -536,6 +536,7 @@ def _rows(results: list[ItemResult]) -> list[dict]:
                 "cheapest_color": cheapest.color if cheapest else "",
                 "all_colors": colors,
                 "mizuno_msrp": cheapest.msrp if cheapest else None,
+                "best_deal_index": best.deal_index if best else None,
                 "best_discount_pct": best.discount_pct if best else None,
                 "best_savings": best.savings if best else None,
                 "best_color": best.color if best else "",
@@ -583,6 +584,7 @@ def write_json(results: list[ItemResult], path: Path) -> None:
                         "reference_label": lst.reference_label,
                         "reference_source": lst.reference_source,
                         "reference_as_of": lst.reference_as_of,
+                        "deal_index": lst.deal_index,
                         "estimated": lst.estimated,
                         "discount_pct": lst.discount_pct,
                         "savings": lst.savings,

@@ -1,14 +1,11 @@
-"""Tiered reference-price waterfall for discount calculations."""
+"""Reference prices for deal scoring — official MSRP and eBay seller list only."""
 
 from __future__ import annotations
 
-import statistics
-import time
 from collections import defaultdict
 
 from .fetch_budget import MAX_MIZUNO_EU_FETCHES_PER_RUN, MAX_MIZUNO_FETCHES_PER_RUN
 from .models import Listing
-from .currency_util import to_usd
 from .msrp_lookup import lookup_estimated_msrp
 from .mizuno_eu import MizunoEuClient
 from .mizuno_usa import MizunoUsaClient
@@ -20,25 +17,27 @@ from .style_extractor import (
     resolve_style_id,
 )
 
-MIN_MARKET_SAMPLES = 3
-
 SOURCE_LABELS = {
     "mizuno_official": "Mizuno MSRP",
     "mizuno_eu": "Mizuno EU MSRP",
     "catalog": "Catalog MSRP",
-    "market": "Market reference",
     "ebay_list": "vs seller list",
+    "peer_style": "Peer median (style)",
+    "peer_product": "Peer median (product)",
+    "peer_category": "Category median",
     "estimated": "Estimated MSRP",
 }
 
 
 class ReferenceResolver:
-    """Apply the tiered MSRP / reference-price waterfall to listings."""
+    """Apply official MSRP + per-listing eBay list prices (no keyword guesses)."""
 
     def __init__(
         self,
         cache: ReferenceCache | None = None,
         mizuno: MizunoUsaClient | None = None,
+        *,
+        allow_estimated: bool = False,
     ):
         self.cache = cache or ReferenceCache()
         self.mizuno_usa = mizuno or MizunoUsaClient(
@@ -49,17 +48,18 @@ class ReferenceResolver:
             cache=self.cache,
             max_fetches_per_run=MAX_MIZUNO_EU_FETCHES_PER_RUN,
         )
+        self.allow_estimated = allow_estimated
         self._official_by_style: dict[str, PriceEntry] = {}
         self._eu_by_style: dict[str, PriceEntry] = {}
         self._catalog_by_style: dict[str, PriceEntry] = {}
 
     def finalize_listings(self, listings: list[Listing]) -> None:
-        """Run all tiers once; dedupe Mizuno fetches by style id."""
         self._ensure_style_ids(listings)
         self._prefetch_references(listings)
         self._apply_cached_tiers(listings)
-        self._apply_market_references(listings)
-        self._apply_late_tiers(listings)
+        self._apply_ebay_list_prices(listings)
+        if self.allow_estimated:
+            self._apply_estimated(listings)
 
     def _ensure_style_ids(self, listings: list[Listing]) -> None:
         for listing in listings:
@@ -136,18 +136,8 @@ class ReferenceResolver:
                     self._entry_for_currency(catalog, listing.currency or "USD"),
                     estimated=False,
                 )
-                continue
 
-            if listing.original_price and listing.original_price > listing.total:
-                self._apply(
-                    listing,
-                    price=listing.original_price,
-                    source="ebay_list",
-                    as_of="",
-                    estimated=False,
-                )
-
-    def _apply_late_tiers(self, listings: list[Listing]) -> None:
+    def _apply_ebay_list_prices(self, listings: list[Listing]) -> None:
         for listing in listings:
             if listing.reference_source:
                 continue
@@ -159,8 +149,11 @@ class ReferenceResolver:
                     as_of="",
                     estimated=False,
                 )
-                continue
 
+    def _apply_estimated(self, listings: list[Listing]) -> None:
+        for listing in listings:
+            if listing.reference_source:
+                continue
             estimated = lookup_estimated_msrp(listing.title)
             if estimated:
                 self._apply(
@@ -171,45 +164,9 @@ class ReferenceResolver:
                     estimated=True,
                 )
 
-    def _apply_market_references(self, listings: list[Listing]) -> None:
-        anchors: dict[str, list[float]] = defaultdict(list)
-        for listing in listings:
-            if listing.reference_source:
-                continue
-            style_id = normalize_style_id(listing.style_id)
-            if not style_id:
-                continue
-            if listing.source == "foot-store":
-                anchors[style_id].append(listing.total)
-            if listing.original_price and listing.original_price > 0:
-                anchors[style_id].append(listing.original_price)
-
-        medians: dict[str, float] = {}
-        for style_id, prices in anchors.items():
-            if len(prices) < MIN_MARKET_SAMPLES:
-                continue
-            medians[style_id] = round(statistics.median(prices), 2)
-
-        if not medians:
-            return
-
-        today = time.strftime("%Y-%m-%d")
-        for listing in listings:
-            if listing.reference_source:
-                continue
-            style_id = normalize_style_id(listing.style_id)
-            median = medians.get(style_id)
-            if median is None:
-                continue
-            self._apply(
-                listing,
-                price=median,
-                source="market",
-                as_of=today,
-                estimated=False,
-            )
-
     def _entry_for_currency(self, entry: PriceEntry, target: str) -> PriceEntry:
+        from .currency_util import to_usd
+
         target = (target or "USD").upper()
         if entry.currency.upper() == target:
             return entry
@@ -258,9 +215,9 @@ class ReferenceResolver:
         listing.estimated = estimated
 
 
-def apply_references(listings: list[Listing]) -> None:
-    """Convenience helper used by scrape paths."""
-    ReferenceResolver().finalize_listings(listings)
+def apply_references(listings: list[Listing], *, allow_estimated: bool = False) -> None:
+    """Official MSRP + eBay list prices; peer scoring runs separately."""
+    ReferenceResolver(allow_estimated=allow_estimated).finalize_listings(listings)
 
 
 def reference_source_counts(listings: list[Listing]) -> dict[str, int]:

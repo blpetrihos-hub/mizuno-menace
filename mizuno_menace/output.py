@@ -131,29 +131,40 @@ def _deal_listings(listings: list[Listing]) -> list[Listing]:
     return _sorted_listings(discounted if discounted else listings)
 
 
+def _group_by_price(listings: list[Listing]) -> list[tuple[float, list[Listing]]]:
+    """Group color variants that share the same total price."""
+    buckets: dict[float, list[Listing]] = {}
+    for lst in listings:
+        buckets.setdefault(lst.total, []).append(lst)
+    return sorted(buckets.items(), key=lambda kv: kv[0])
+
+
 def _color_links_text(listings: list[Listing], *, max_links: int = MAX_COLOR_LINKS) -> Text | str:
-    """Clickable links labeled by color name, styled in that color."""
+    """Clickable color links; one price label per price tier."""
     items = _deal_listings(listings)
-    total = len(items)
-    items = items[:max_links]
     if not items:
         return "[dim]none[/dim]"
+    total = len(items)
+    display = items[:max_links]
     cell = Text()
-    for i, lst in enumerate(items):
-        if i:
-            cell.append("   ")
-        label = lst.color or "View"
-        if lst.url:
-            style = Style(
-                link=lst.url,
-                color=_rich_color(lst.color),
-                bold=True,
-                underline=True,
-            )
-            cell.append(label, style=style)
-            cell.append(f" {_money(lst.total, lst.currency)}", style="dim")
-        else:
-            cell.append(label)
+    for tier_i, (price, group) in enumerate(_group_by_price(display)):
+        if tier_i:
+            cell.append("   |   ", style="dim")
+        for j, lst in enumerate(group):
+            if j:
+                cell.append("  ", style="dim")
+            label = lst.color or "View"
+            if lst.url:
+                style = Style(
+                    link=lst.url,
+                    color=_rich_color(lst.color),
+                    bold=True,
+                    underline=True,
+                )
+                cell.append(label, style=style)
+            else:
+                cell.append(label)
+        cell.append(f" {_money(price, group[0].currency)}", style="dim")
     if total > max_links:
         cell.append(f"   +{total - max_links} more", style="dim")
     return cell
@@ -161,26 +172,29 @@ def _color_links_text(listings: list[Listing], *, max_links: int = MAX_COLOR_LIN
 
 def _html_color_links(listings: list[Listing], *, max_links: int = MAX_COLOR_LINKS) -> str:
     items = _deal_listings(listings)
-    total = len(items)
-    items = items[:max_links]
     if not items:
         return '<span class="muted">none</span>'
-    parts: list[str] = []
-    for lst in items:
-        label = html.escape(lst.color or "View")
-        price = html.escape(_money(lst.total, lst.currency))
-        if lst.url:
-            css = _css_color(lst.color)
-            parts.append(
-                f'<a href="{html.escape(lst.url)}" target="_blank" '
-                f'rel="noopener noreferrer" style="color:{css};font-weight:600">'
-                f"{label}</a> <span class='muted'>{price}</span>"
-            )
-        else:
-            parts.append(f"{label} <span class='muted'>{price}</span>")
+    total = len(items)
+    display = items[:max_links]
+    tiers: list[str] = []
+    for price, group in _group_by_price(display):
+        parts: list[str] = []
+        for lst in group:
+            label = html.escape(lst.color or "View")
+            if lst.url:
+                css = _css_color(lst.color)
+                parts.append(
+                    f'<a href="{html.escape(lst.url)}" target="_blank" '
+                    f'rel="noopener noreferrer" style="color:{css};font-weight:600">'
+                    f"{label}</a>"
+                )
+            else:
+                parts.append(label)
+        price_label = html.escape(_money(price, group[0].currency))
+        tiers.append(" ".join(parts) + f" <span class='muted'>{price_label}</span>")
     if total > max_links:
-        parts.append(f"<span class='muted'>+{total - max_links} more</span>")
-    return " &nbsp;|&nbsp; ".join(parts)
+        tiers.append(f"<span class='muted'>+{total - max_links} more</span>")
+    return " &nbsp;|&nbsp; ".join(tiers)
 
 
 def _group_by_product(listings: list[Listing]) -> list[tuple[str, list[Listing]]]:
@@ -262,35 +276,6 @@ def print_best_discounts(results: list[ItemResult], console: Console, top: int =
     return shown
 
 
-def print_zero_result_notes(results: list[ItemResult], console: Console) -> None:
-    """Explain products with no in-stock listings (common for discontinued shoes)."""
-    missing = [r for r in results if r.count == 0 and not r.error]
-    above_msrp = [
-        r for r in results
-        if r.cheapest and r.cheapest.discount_pct is not None and r.cheapest.discount_pct <= 0
-    ]
-    if not missing and not above_msrp:
-        return
-    if missing:
-        console.print("\n[dim]No in-stock listings found for:[/dim]")
-        for r in missing:
-            line = f"  [dim]- {r.product_name or r.query}[/dim]"
-            if r.note:
-                line += f" [dim]({r.note})[/dim]"
-            console.print(line)
-        console.print(
-            "[dim]  (Add eBay keys for NWT listings, or check back when foot-store restocks.)[/dim]"
-        )
-    if above_msrp:
-        console.print("\n[yellow]Cheapest listing is at/above MSRP for:[/yellow]")
-        for r in above_msrp:
-            c = r.cheapest
-            console.print(
-                f"  [yellow]- {r.product_name or r.query}[/yellow] "
-                f"({_money(c.total, r.currency)} vs MSRP {_money(c.msrp, r.currency)})"
-            )
-
-
 def prompt_open_links(listings: list[Listing], console: Console) -> None:
     """Let the user type a listing # to open that product in the default browser."""
     if not listings:
@@ -336,35 +321,6 @@ def _logo_data_uri() -> str:
     return f"data:image/png;base64,{encoded}"
 
 
-def _html_notes(results: list[ItemResult]) -> str:
-    """Compact footnotes for products not shown in the deals table."""
-    lines: list[str] = []
-    missing = [r for r in results if r.count == 0 and not r.error]
-    above = [
-        r for r in results
-        if r.cheapest and r.cheapest.discount_pct is not None and r.cheapest.discount_pct <= 0
-    ]
-    if missing:
-        for r in missing:
-            item = html.escape(r.product_name or r.query)
-            if r.note:
-                item += f" — {html.escape(r.note)}"
-            lines.append(f"<li>{item}</li>")
-    if above:
-        for r in above:
-            c = r.cheapest
-            lines.append(
-                "<li>"
-                f"{html.escape(r.product_name or r.query)}: "
-                f"{html.escape(_money(c.total, r.currency))} vs MSRP "
-                f"{html.escape(_money(c.msrp, r.currency))}"
-                "</li>"
-            )
-    if not lines:
-        return ""
-    return f'<div class="notes"><ul>{"".join(lines)}</ul></div>'
-
-
 def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
     """Write a self-contained HTML report with clickable color-named links."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -405,7 +361,6 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
         if logo_uri
         else '<header class="brand"><span class="brand-text">Mizuno Menace</span></header>'
     )
-    notes = _html_notes(results)
 
     doc = f"""<!DOCTYPE html>
 <html lang="en">
@@ -425,18 +380,40 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
     body {{
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
       margin: 0;
-      padding: 2rem;
+      padding: 2rem 1.5rem 2.5rem;
       background: var(--bg);
       color: var(--fg);
     }}
-    .brand {{ margin-bottom: 1.75rem; }}
-    .brand img {{ display: block; height: 52px; width: auto; }}
-    .brand-text {{ font-size: 1.75rem; font-weight: 600; letter-spacing: -0.02em; }}
+    .page {{
+      max-width: 1100px;
+      margin: 0 auto;
+    }}
+    .brand {{
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0 0 2rem;
+      padding: 0.5rem 0 1.25rem;
+    }}
+    .brand img {{
+      display: block;
+      width: min(480px, 92vw);
+      height: auto;
+      max-height: 72px;
+      object-fit: contain;
+    }}
+    .brand-text {{
+      font-size: 1.75rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      text-align: center;
+    }}
     h2 {{
       font-size: 1.05rem;
       font-weight: 600;
       color: var(--fg);
       margin: 0 0 1rem;
+      text-align: center;
     }}
     table {{ border-collapse: collapse; width: 100%; }}
     th, td {{ border: 1px solid var(--border); padding: 0.6rem 0.7rem; vertical-align: top; }}
@@ -446,12 +423,10 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
     a:hover {{ text-decoration: underline; }}
     .disc {{ color: var(--disc); font-weight: 600; }}
     .muted {{ color: var(--muted); font-size: 0.85rem; }}
-    .notes {{ margin-top: 1.5rem; color: var(--muted); font-size: 0.9rem; }}
-    .notes ul {{ margin: 0; padding-left: 1.25rem; }}
-    .notes li {{ margin: 0.35rem 0; }}
   </style>
 </head>
 <body>
+  <div class="page">
   {header}
 
   <h2>Top {top} product deals</h2>
@@ -466,7 +441,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
       {''.join(top_rows) if top_rows else f'<tr><td colspan="7" class="muted">No deals below MSRP found.</td></tr>'}
     </tbody>
   </table>
-  {notes}
+  </div>
 </body>
 </html>
 """

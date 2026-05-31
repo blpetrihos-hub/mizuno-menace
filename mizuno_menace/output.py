@@ -424,8 +424,11 @@ def dark_theme_css() -> str:
     .logo-mark {
       display: block;
       object-fit: contain;
-      image-rendering: high-quality;
-      image-rendering: -webkit-optimize-contrast;
+      image-rendering: auto;
+    }
+    .brand .logo-mark {
+      /* Downscaling was darkening the header mark vs side logos */
+      filter: brightness(1.04) contrast(1.02);
     }
     .side-brand img {
       width: 100%;

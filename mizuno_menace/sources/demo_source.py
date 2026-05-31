@@ -60,6 +60,17 @@ class DemoSource(PriceSource):
         max_pages: int = 350,
         **kwargs,
     ) -> list[Listing]:
+        from ..search_criteria import normalize_search_scope
+
+        scope = normalize_search_scope(kwargs.get("search_scope", "both"))
+        custom = (kwargs.get("custom_query") or "").strip()
+        allowed_kinds: set[str] | None = None
+        if not custom:
+            if scope == "apparel":
+                allowed_kinds = {"apparel"}
+            elif scope == "shoes":
+                allowed_kinds = {"shoe"}
+
         catalog = [
             ("Jacket Mizuno Sapporo Hybrid GLT", "apparel", "32FE9A0609"),
             ("Mizuno Team Sendai High Neck Sweatshirt", "apparel", ""),
@@ -74,6 +85,8 @@ class DemoSource(PriceSource):
         ]
         listings: list[Listing] = []
         for i, (title, kind, style_id) in enumerate(catalog):
+            if allowed_kinds is not None and kind not in allowed_kinds:
+                continue
             seed = int(hashlib.sha256(title.encode()).hexdigest(), 16)
             base = 60 + (seed % 90)
             for variant in range(3):

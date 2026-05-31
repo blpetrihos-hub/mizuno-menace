@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import sys
 import threading
 import webbrowser
@@ -56,7 +57,12 @@ def _settings_html(settings: ScanSettings) -> str:
         sel = " selected" if n == settings.top else ""
         top_options.append(f'<option value="{n}"{sel}>Top {n} deals</option>')
 
-    hint = scan_description(settings.apparel_size, settings.shoe_size_us)
+    hint = scan_description(
+        settings.apparel_size,
+        settings.shoe_size_us,
+        search_scope=settings.search_scope,
+        custom_query=settings.custom_query,
+    )
     apparel_options = _select_options(
         APPAREL_SIZE_OPTIONS,
         settings.apparel_size,
@@ -67,6 +73,10 @@ def _settings_html(settings: ScanSettings) -> str:
         settings.shoe_size_us,
         label_fn=lambda s: f"US {s}",
     )
+    custom_body = html.escape(settings.custom_query)
+
+    def scope_checked(value: str) -> str:
+        return " checked" if settings.search_scope == value else ""
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -91,8 +101,8 @@ def _settings_html(settings: ScanSettings) -> str:
       max-height: min(52vh, 420px);
     }}
     .panel {{
-      flex: 0 1 440px;
-      max-width: 440px;
+      flex: 0 1 480px;
+      max-width: 480px;
       text-align: center;
     }}
     h2 {{
@@ -129,7 +139,67 @@ def _settings_html(settings: ScanSettings) -> str:
       outline: none;
       border-color: #569cd6;
     }}
-    button {{
+    .mode-row {{
+      display: flex;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+    }}
+    .mode-btn {{
+      flex: 1 1 0;
+      min-width: 7rem;
+      margin: 0;
+      cursor: pointer;
+    }}
+    .mode-btn input {{
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }}
+    .mode-btn span {{
+      display: block;
+      padding: 0.65rem 0.5rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--fg);
+      background: #252526;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      text-align: center;
+    }}
+    .mode-btn input:checked + span {{
+      border-color: #569cd6;
+      background: #2a2d2e;
+      color: #ffffff;
+    }}
+    .mode-btn:hover span {{
+      border-color: #569cd6;
+    }}
+    input[type="text"], textarea {{
+      width: 100%;
+      padding: 0.7rem 0.85rem;
+      font-size: 0.95rem;
+      color: var(--fg);
+      background: #252526;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-family: inherit;
+    }}
+    input[type="text"]:focus, textarea:focus {{
+      outline: none;
+      border-color: #569cd6;
+    }}
+    textarea {{
+      min-height: 4.5rem;
+      resize: vertical;
+    }}
+    .field-note {{
+      margin: 0.35rem 0 0;
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.4;
+    }}
+    button[type="submit"] {{
       width: 100%;
       padding: 0.75rem 1rem;
       font-size: 1rem;
@@ -141,7 +211,7 @@ def _settings_html(settings: ScanSettings) -> str:
       cursor: pointer;
       margin-top: 0.35rem;
     }}
-    button:hover {{
+    button[type="submit"]:hover {{
       background: #e8e8e8;
     }}
     .hint {{
@@ -163,6 +233,29 @@ def _settings_html(settings: ScanSettings) -> str:
       <div class="panel">
         <h2>Configure your scan</h2>
         <form method="POST" action="/scan">
+          <div class="field">
+            <label>What to search</label>
+            <div class="mode-row">
+              <label class="mode-btn">
+                <input type="radio" name="search_scope" value="both"{scope_checked("both")}>
+                <span>Both</span>
+              </label>
+              <label class="mode-btn">
+                <input type="radio" name="search_scope" value="apparel"{scope_checked("apparel")}>
+                <span>Apparel only</span>
+              </label>
+              <label class="mode-btn">
+                <input type="radio" name="search_scope" value="shoes"{scope_checked("shoes")}>
+                <span>Shoes only</span>
+              </label>
+            </div>
+          </div>
+          <div class="field">
+            <label for="custom_query">Custom eBay search (optional)</label>
+            <textarea id="custom_query" name="custom_query" rows="3"
+              placeholder="Example: Mizuno Wave Rider mens size 11 NWT">{custom_body}</textarea>
+            <p class="field-note">When you enter text here, the scan uses only this search and ignores the preset queries above. Pick Apparel only or Shoes only to apply the matching size filter.</p>
+          </div>
           <div class="field">
             <label for="apparel_size">Apparel size</label>
             <select id="apparel_size" name="apparel_size" aria-label="Apparel size">
@@ -189,16 +282,41 @@ def _settings_html(settings: ScanSettings) -> str:
     </div>
   </div>
   <script>
+    function selectedScope() {{
+      const picked = document.querySelector('input[name="search_scope"]:checked');
+      return picked ? picked.value : 'both';
+    }}
+
     function updateScanHint() {{
       const apparel = document.getElementById('apparel_size').value;
       const shoe = document.getElementById('shoe_size_us').value;
-      document.getElementById('scan-hint').textContent =
-        'Searches eBay for New With Tags, Buy It Now Mizuno listings — '
-        + 'mens size ' + apparel + ' apparel and mens US size ' + shoe + ' shoes — '
-        + 'then opens a ranked HTML report.';
+      const scope = selectedScope();
+      const custom = document.getElementById('custom_query').value.trim();
+      const hint = document.getElementById('scan-hint');
+      const prefix = 'Searches eBay for New With Tags, Buy It Now Mizuno listings — ';
+      const suffix = ' — then opens a ranked HTML report.';
+
+      if (custom) {{
+        hint.textContent = prefix + 'using your custom search "' + custom + '" only' + suffix;
+        return;
+      }}
+      if (scope === 'apparel') {{
+        hint.textContent = prefix + 'mens size ' + apparel + ' apparel only' + suffix;
+        return;
+      }}
+      if (scope === 'shoes') {{
+        hint.textContent = prefix + 'mens US size ' + shoe + ' shoes only' + suffix;
+        return;
+      }}
+      hint.textContent = prefix + 'mens size ' + apparel + ' apparel and mens US size ' + shoe + ' shoes' + suffix;
     }}
+
+    document.querySelectorAll('input[name="search_scope"]').forEach(function(el) {{
+      el.addEventListener('change', updateScanHint);
+    }});
     document.getElementById('apparel_size').addEventListener('change', updateScanHint);
     document.getElementById('shoe_size_us').addEventListener('change', updateScanHint);
+    document.getElementById('custom_query').addEventListener('input', updateScanHint);
   </script>
 </body>
 </html>
@@ -258,10 +376,14 @@ def prompt_scan_settings(default: ScanSettings | None = None) -> ScanSettings:
                 top = default.top
             apparel_size = params.get("apparel_size", [default.apparel_size])[0]
             shoe_size_us = params.get("shoe_size_us", [default.shoe_size_us])[0]
+            search_scope = params.get("search_scope", [default.search_scope])[0]
+            custom_query = params.get("custom_query", [default.custom_query])[0]
             settings = ScanSettings(
                 top=top,
                 apparel_size=apparel_size,
                 shoe_size_us=shoe_size_us,
+                search_scope=search_scope,
+                custom_query=custom_query,
             ).normalized()
             choice["settings"] = settings
             waiting = _waiting_html().encode("utf-8")

@@ -16,7 +16,7 @@ from .scan_settings import ScanSettings, load_scan_settings, save_scan_settings
 from .fetch_budget import DEFAULT_MAX_PAGES, DEFAULT_SOURCE_LIMIT, effective_max_pages
 from .paths import find_config, user_data_dir
 from .products import load_products, products_from_queries
-from .search_criteria import ebay_apparel_query, ebay_shoe_query, us_shoe_to_eu
+from .search_criteria import plan_scan_searches, scan_description, us_shoe_to_eu
 from .sources import DemoSource, EbaySource, FootStoreSource
 
 
@@ -109,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
             top=args.top,
             apparel_size=saved.apparel_size,
             shoe_size_us=saved.shoe_size_us,
+            search_scope=saved.search_scope,
+            custom_query=saved.custom_query,
         ).normalized()
     elif args.no_settings:
         scan_settings = saved
@@ -119,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
     apparel_size = scan_settings.apparel_size
     shoe_size_us = scan_settings.shoe_size_us
     shoe_size_eu = us_shoe_to_eu(shoe_size_us)
+    search_scope = scan_settings.search_scope
+    custom_query = scan_settings.custom_query
 
     use_footstore = args.footstore and not args.demo
     sources = build_sources(
@@ -142,25 +146,52 @@ def main(argv: list[str] | None = None) -> int:
         )
         results = agg.search_all(products)
     else:
-        console.print(
-            f"Scanning Mizuno eBay deals (mens {apparel_size} apparel, mens US {shoe_size_us} "
-            f"shoes) via {', '.join(s.name for s in sources)} …"
-        )
+        scope_label = {
+            "both": f"mens {apparel_size} apparel + US {shoe_size_us} shoes",
+            "apparel": f"mens {apparel_size} apparel only",
+            "shoes": f"mens US {shoe_size_us} shoes only",
+        }.get(search_scope, search_scope)
+        if custom_query:
+            console.print(
+                f'Scanning Mizuno eBay deals (custom: "{custom_query}") via '
+                f"{', '.join(s.name for s in sources)} …"
+            )
+        else:
+            console.print(
+                f"Scanning Mizuno eBay deals ({scope_label}) via "
+                f"{', '.join(s.name for s in sources)} …"
+            )
         cfg = load_ebay_config()
         if cfg.is_configured:
-            apparel_query = ebay_apparel_query(apparel_size)
-            shoe_query = ebay_shoe_query(shoe_size_us)
-            console.print(
-                f"  eBay queries: [dim]\"{apparel_query}\"[/dim], "
-                f"[dim]\"{shoe_query}\"[/dim] (NWT, Buy It Now)"
-            )
+            queries = [
+                q for q, _, _ in plan_scan_searches(
+                    apparel_size=apparel_size,
+                    shoe_size_us=shoe_size_us,
+                    search_scope=search_scope,
+                    custom_query=custom_query,
+                )
+            ]
+            if queries:
+                joined = '", "'.join(queries)
+                console.print(
+                    f'  eBay queries: [dim]"{joined}"[/dim] (NWT, Buy It Now)'
+                )
         console.print()
         page_budget = effective_max_pages(args.max_pages, top)
         if cfg.is_configured or args.demo:
             from .fetch_budget import ebay_scan_limit
             el = ebay_scan_limit(top, page_budget)
+            query_count = len(
+                plan_scan_searches(
+                    apparel_size=apparel_size,
+                    shoe_size_us=shoe_size_us,
+                    search_scope=search_scope,
+                    custom_query=custom_query,
+                )
+            )
             console.print(
-                f"  [dim]eBay budget: up to {el} results per query (2 queries)[/dim]"
+                f"  [dim]eBay budget: up to {el} results per query "
+                f"({query_count} quer{'y' if query_count == 1 else 'ies'})[/dim]"
             )
         if use_footstore:
             console.print(
@@ -172,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
             apparel_size=apparel_size,
             shoe_size_us=shoe_size_us,
             shoe_size_eu=shoe_size_eu,
+            search_scope=search_scope,
+            custom_query=custom_query,
         )
         stats = getattr(agg, "last_scan_stats", {})
         if stats:

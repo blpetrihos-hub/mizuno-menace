@@ -72,6 +72,8 @@ class Aggregator:
         apparel_size: str = APPAREL_SIZE,
         shoe_size_us: str = SHOE_SIZE_US,
         shoe_size_eu: str = SHOE_SIZE_EU,
+        search_scope: str = "both",
+        custom_query: str = "",
         max_pages: int = 0,
         top: int = 30,
     ) -> list[ItemResult]:
@@ -91,6 +93,8 @@ class Aggregator:
                     "apparel_size": apparel_size,
                     "shoe_size_us": shoe_size_us,
                     "shoe_size_eu": shoe_size_eu,
+                    "search_scope": search_scope,
+                    "custom_query": custom_query,
                     "max_pages": page_budget,
                 }
                 if source.name == "foot-store":

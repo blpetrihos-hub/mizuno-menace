@@ -190,10 +190,9 @@ class EbaySource(PriceSource):
         from ..search_criteria import (
             APPAREL_SIZE,
             SHOE_SIZE_US,
-            ebay_apparel_query,
-            ebay_shoe_query,
             normalize_apparel_size,
             normalize_shoe_size_us,
+            plan_scan_searches,
         )
 
         apparel_size = normalize_apparel_size(apparel_size or APPAREL_SIZE)
@@ -202,9 +201,11 @@ class EbaySource(PriceSource):
         listings: list[Listing] = []
         seen_urls: set[str] = set()
 
-        searches = (
-            (ebay_apparel_query(apparel_size), "apparel", apparel_size),
-            (ebay_shoe_query(shoe_size_us), "shoe", shoe_size_us),
+        searches = plan_scan_searches(
+            apparel_size=apparel_size,
+            shoe_size_us=shoe_size_us,
+            search_scope=kwargs.get("search_scope", "both"),
+            custom_query=kwargs.get("custom_query", ""),
         )
         for query, kind, size in searches:
             product = Product(name=query, query=query, kind=kind, size=size)

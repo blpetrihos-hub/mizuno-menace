@@ -12,6 +12,8 @@ a = Analysis(
         ("mizuno_menace/data", "mizuno_menace/data"),
     ],
     hiddenimports=[
+        "mizuno_menace.deal_scorer",
+        "mizuno_menace.reference_resolver",
         "mizuno_menace.sources.ebay_source",
         "mizuno_menace.sources.footstore_source",
         "mizuno_menace.sources.demo_source",

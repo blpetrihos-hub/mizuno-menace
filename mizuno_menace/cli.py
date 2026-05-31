@@ -10,7 +10,7 @@ from rich.console import Console
 
 from . import output
 from .aggregator import Aggregator
-from .config import load_ebay_config
+from .config import ebay_setup_hint, load_ebay_config
 from .launcher import load_last_top, prompt_top_count, save_last_top
 from .fetch_budget import DEFAULT_MAX_PAGES, DEFAULT_SOURCE_LIMIT, effective_max_pages
 from .paths import find_config, user_data_dir
@@ -19,7 +19,7 @@ from .search_criteria import APPAREL_SIZE, SHOE_SIZE_US
 from .sources import DemoSource, EbaySource, FootStoreSource
 
 
-def build_sources(use_demo: bool, force_demo: bool, use_footstore: bool) -> list:
+def build_sources(*, force_demo: bool, use_footstore: bool) -> list:
     if force_demo:
         return [DemoSource()]
 
@@ -27,8 +27,6 @@ def build_sources(use_demo: bool, force_demo: bool, use_footstore: bool) -> list
     sources: list = []
     if cfg.is_configured:
         sources.append(EbaySource(cfg))
-    elif use_demo:
-        sources.append(DemoSource())
     if use_footstore:
         sources.append(FootStoreSource())
     return sources
@@ -79,9 +77,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--html", type=Path, default=None)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--no-prompt", action="store_true")
-    parser.add_argument("--demo", action="store_true", help="Use offline demo data.")
+    parser.add_argument("--demo", action="store_true", help="Offline demo (no eBay keys).")
     parser.add_argument("--sample", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--no-fallback", action="store_true")
+    parser.add_argument(
+        "--no-fallback",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "--footstore",
         action="store_true",
@@ -110,12 +112,11 @@ def main(argv: list[str] | None = None) -> int:
 
     use_footstore = args.footstore and not args.demo
     sources = build_sources(
-        use_demo=not args.no_fallback,
         force_demo=args.demo,
         use_footstore=use_footstore,
     )
     if not sources:
-        console.print("[red]No data sources available.[/red] Add eBay keys or use --demo.")
+        console.print(f"[red]{ebay_setup_hint()}[/red]")
         return 1
 
     agg = Aggregator(sources, limit=args.limit, use_aspects=not args.no_aspect)
@@ -141,11 +142,6 @@ def main(argv: list[str] | None = None) -> int:
             console.print(
                 f"  eBay queries: [dim]\"{EBAY_APPAREL_QUERY}\"[/dim], "
                 f"[dim]\"{EBAY_SHOE_QUERY}\"[/dim] (NWT, Buy It Now)"
-            )
-        elif not args.demo:
-            console.print(
-                "  [dim]eBay: skipped — copy .env.example to .env and add "
-                "EBAY_CLIENT_ID / EBAY_CLIENT_SECRET (ready when keys arrive)[/dim]"
             )
         console.print()
         page_budget = effective_max_pages(args.max_pages, top)

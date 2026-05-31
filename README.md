@@ -19,36 +19,60 @@ Find **New With Tags, Buy It Now** Mizuno apparel and shoes on **eBay** and rank
 
 ## Quick start
 
-### From source
+### 1. Install
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # add eBay keys when ready
+```
+
+### 2. Add eBay keys (required for live scans)
+
+```powershell
+copy .env.example .env
+```
+
+Edit `.env` with your **production** App ID (Client ID) and Cert ID (Client Secret) from [developer.ebay.com](https://developer.ebay.com/).
+
+The tool looks for `.env` in (first match wins):
+
+- Current working directory
+- Folder containing `MizunoMenace.exe` (or project root when running from source)
+- `%LOCALAPPDATA%\MizunoMenace\.env`
+
+### 3. Run
+
+```powershell
 python run.py
 ```
 
-### Without eBay keys (demo)
+Settings page → pick deal count → scan → HTML report opens in your browser.
+
+### Without eBay keys (demo only)
 
 ```powershell
 python run.py --demo --no-settings -t 30
 ```
 
-### Build executable
+### Build local executable
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-Output: `dist\MizunoMenace.exe`
+Output: `dist\MizunoMenace.exe` plus `dist\.env.example`.
+
+**After building:** copy `dist\.env.example` → `dist\.env`, add keys, run the exe. Reports and cache go to `%LOCALAPPDATA%\MizunoMenace\`.
 
 ## Configuration
 
-Copy `.env.example` to `.env` and add eBay credentials — **this is the only required setup**:
+Only eBay credentials are required:
 
 ```
 EBAY_CLIENT_ID=...
 EBAY_CLIENT_SECRET=...
 ```
+
+Optional: `EBAY_ENV=production`, `EBAY_MARKETPLACE_ID=EBAY_US`
 
 | Flag | Description |
 | --- | --- |

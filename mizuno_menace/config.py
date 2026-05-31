@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
-from .paths import find_config
+from .paths import exe_dir, find_config, user_data_dir
 
 try:
     from dotenv import load_dotenv
@@ -47,3 +48,31 @@ def load_ebay_config() -> EbayConfig:
         env=os.getenv("EBAY_ENV", "production").strip().lower(),
         marketplace_id=os.getenv("EBAY_MARKETPLACE_ID", "EBAY_US").strip(),
     )
+
+
+def ebay_env_search_paths() -> list[Path]:
+    """Locations checked for a .env file (first match wins)."""
+    seen: set[Path] = set()
+    paths: list[Path] = []
+    for base in (Path.cwd(), exe_dir(), user_data_dir()):
+        if base in seen:
+            continue
+        seen.add(base)
+        paths.append(base / ".env")
+    return paths
+
+
+def ebay_setup_hint() -> str:
+    """Human-readable instructions when eBay keys are missing."""
+    lines = [
+        "eBay API keys are required.",
+        "",
+        "1. Copy .env.example to .env",
+        "2. Add EBAY_CLIENT_ID and EBAY_CLIENT_SECRET from https://developer.ebay.com/",
+        "3. Place .env in one of these locations:",
+    ]
+    for path in ebay_env_search_paths():
+        lines.append(f"   - {path}")
+    lines.append("")
+    lines.append("Then run again. Use --demo for an offline test without keys.")
+    return "\n".join(lines)

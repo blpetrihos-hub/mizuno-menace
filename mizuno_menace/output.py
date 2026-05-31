@@ -348,11 +348,19 @@ def prompt_open_links(listings: list[Listing], console: Console) -> None:
 
 def _logo_data_uri() -> str:
     """Embedded logo for a self-contained HTML report."""
-    logo = asset_path("logo.png")
-    if not logo.exists():
+    return _asset_data_uri("logo.png")
+
+
+def _asset_data_uri(name: str) -> str:
+    path = asset_path(name)
+    if not path.exists():
         return ""
-    encoded = base64.b64encode(logo.read_bytes()).decode("ascii")
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:image/png;base64,{encoded}"
+
+
+def _vertical_logo_data_uri() -> str:
+    return _asset_data_uri("logo-vertical.png")
 
 
 def _logo_pixel_size() -> tuple[int, int]:
@@ -386,8 +394,60 @@ def dark_theme_css() -> str:
       color: var(--fg);
     }
     .page {
-      max-width: 1100px;
+      max-width: 1280px;
       margin: 0 auto;
+    }
+    .table-stage {
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      gap: clamp(0.5rem, 2vw, 1.25rem);
+      margin-top: 0.25rem;
+    }
+    .table-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .side-brand {
+      flex: 0 0 clamp(52px, 7.5vw, 96px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      align-self: stretch;
+      position: relative;
+      pointer-events: none;
+      user-select: none;
+    }
+    .side-brand::before {
+      content: "";
+      position: absolute;
+      inset: -8% -20%;
+      background: radial-gradient(
+        ellipse at center,
+        rgba(204, 204, 204, 0.07) 0%,
+        transparent 72%
+      );
+      z-index: 0;
+    }
+    .side-brand img {
+      position: relative;
+      z-index: 1;
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: min(78vh, 820px);
+      object-fit: contain;
+      object-position: center;
+      opacity: 0.82;
+      mix-blend-mode: screen;
+      filter: contrast(1.08) brightness(0.92);
+    }
+    .side-brand--right img {
+      transform: scaleX(-1);
+    }
+    @media (max-width: 920px) {
+      .side-brand { display: none; }
     }
     .brand {
       display: flex;
@@ -424,6 +484,18 @@ def brand_header_html() -> str:
             f'{dims} decoding="async"></header>'
         )
     return '<header class="brand"><span class="brand-text">Mizuno Menace</span></header>'
+
+
+def _vertical_brand_aside(side: str) -> str:
+    uri = _vertical_logo_data_uri()
+    if not uri:
+        return ""
+    mirror = " side-brand--right" if side == "right" else ""
+    return (
+        f'<aside class="side-brand{mirror}">'
+        f'<img src="{uri}" alt="" aria-hidden="true" decoding="async">'
+        f"</aside>"
+    )
 
 
 def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
@@ -491,6 +563,9 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
   {brand_header_html()}
 
   <h2>Top {top} deals by deal index</h2>
+  <div class="table-stage">
+    {_vertical_brand_aside("left")}
+    <div class="table-wrap">
   <table>
     <thead>
       <tr>
@@ -502,6 +577,9 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
       {''.join(top_rows) if top_rows else f'<tr><td colspan="7" class="muted">No deals below MSRP found.</td></tr>'}
     </tbody>
   </table>
+    </div>
+    {_vertical_brand_aside("right")}
+  </div>
   </div>
 </body>
 </html>

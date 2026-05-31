@@ -44,3 +44,56 @@ class DemoSource(PriceSource):
             )
         listings.sort(key=lambda lst: lst.total)
         return listings
+
+    def scan_deals(
+        self,
+        *,
+        apparel_size: str = "M",
+        shoe_size_us: str = "11",
+        shoe_size_eu: str = "45",
+        max_pages: int = 350,
+        **kwargs,
+    ) -> list[Listing]:
+        from ..msrp_lookup import apply_msrp, normalize_product_name
+
+        samples = [
+            "Jacket Mizuno Sapporo Hybrid GLT",
+            "Mizuno Team Sendai High Neck Sweatshirt",
+            "Hooded Sweatshirt Mizuno Athletics Blue Granite",
+            "Legging Mizuno BT PR Merino Black",
+            "Running shoes Mizuno Wave Rider 29",
+            "Sweatshirt Mizuno Team Sendai",
+            "Jacket Mizuno Sendai Trad",
+            "Hooded Sweatshirt Mizuno Team FZ",
+            "Jersey Mizuno Merino Black",
+            "Jogging Trousers Mizuno Sendai Training",
+            "Running shoes Mizuno Wave Ultima 17",
+            "Running shoes Mizuno Wave Inspire 21",
+            "Hooded Sweatshirt Mizuno Athletics Princess Blue",
+            "Trousers Mizuno Team Sendai Trad",
+            "Running shoes Mizuno Neo Vista",
+            "Sweatshirt High Neck Mizuno Team Sendai",
+            "Coat Mizuno Sapporo Bench",
+            "Running shoes Mizuno Wave Rebellion",
+        ]
+        listings: list[Listing] = []
+        for i, title in enumerate(samples):
+            seed = int(hashlib.sha256(title.encode()).hexdigest(), 16)
+            msrp = 70 + (seed % 100)
+            discount = 10 + (seed % 45)
+            price = round(msrp * (1 - discount / 100), 2)
+            color = COLORS[i % len(COLORS)]
+            lst = Listing(
+                title=title,
+                price=price,
+                currency=self.currency,
+                source=self.name,
+                url=f"https://example.com/demo/{i}",
+                condition="New",
+                buying_option="FIXED_PRICE",
+                color=color,
+                msrp=float(msrp),
+            )
+            lst.product_name = normalize_product_name(title)
+            listings.append(lst)
+        return listings

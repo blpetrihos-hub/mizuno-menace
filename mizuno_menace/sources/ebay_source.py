@@ -168,6 +168,39 @@ class EbaySource(PriceSource):
             )
         return listings
 
+    def scan_deals(
+        self,
+        *,
+        apparel_size: str = "M",
+        shoe_size_us: str = "11",
+        shoe_size_eu: str = "45",
+        max_pages: int = 350,
+        **kwargs,
+    ) -> list[Listing]:
+        from ..models import Product
+        from ..msrp_lookup import apply_msrp, normalize_product_name
+        from ..search_criteria import APPAREL_SIZE, SHOE_SIZE_US
+
+        apparel_size = apparel_size or APPAREL_SIZE
+        shoe_size_us = shoe_size_us or SHOE_SIZE_US
+        per = min(max(max_pages // 2, 25), 50)
+        listings: list[Listing] = []
+        for kind, size in (("apparel", apparel_size), ("shoe", shoe_size_us)):
+            product = Product(name="Mizuno", query="Mizuno", kind=kind, size=size)
+            category_id, aspects = product.ebay_aspects()
+            found = self.search(
+                product.query,
+                limit=per,
+                category_id=category_id,
+                aspects=aspects,
+            )
+            for lst in found:
+                apply_msrp(lst)
+                lst.product_name = normalize_product_name(lst.title)
+                if lst.discount_pct is not None and (lst.discount_pct or 0) > 0:
+                    listings.append(lst)
+        return listings
+
 
 def _first_shipping_cost(item: dict) -> float | None:
     for opt in item.get("shippingOptions") or []:

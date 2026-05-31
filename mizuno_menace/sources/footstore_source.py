@@ -18,8 +18,10 @@ from pathlib import Path
 
 import requests
 
+from ..msrp_lookup import apply_msrp, normalize_product_name
 from ..models import Listing
 from ..paths import cache_dir
+from ..search_criteria import APPAREL_SIZE, SHOE_SIZE_EU, SHOE_SIZE_US
 from .base import PriceSource
 
 SITEMAP_INDEX = "https://foot-store.com/sitemap.xml"
@@ -41,6 +43,22 @@ SLUG_COLOR_PHRASES = (
     "navy-blue", "royal-blue", "maui-blue", "blue-granite", "royal-white",
     "black-white", "grey-white", "navy blue", "royal blue", "maui blue",
 )
+APPAREL_SLUG_MARKERS = (
+    "jacket", "hoodie", "hooded-sweatshirt", "sweatshirt", "tights", "legging",
+    "leggings", "trouser", "trousers", "jogger", "joggers", "shirt", "tee",
+    "jersey", "pants", "coat", "shorts", "vest", "gilet", "half-zip",
+    "windbreaker", "sweater", "pullover", "top",
+)
+SHOE_SLUG_MARKERS = (
+    "running-shoes-mizuno", "shoes-mizuno-wave", "trainers-mizuno",
+    "running-shoes-mizuno", "shoes-mizuno",
+)
+WOMENS_TITLE_MARKERS = (
+    "women", "woman", "womens", "wos", "girl", "girls", "junior", "youth", "kid",
+    "children", "child ",
+)
+# Slug ends with a single-letter size code (not a color word).
+_SIZE_SUFFIX = re.compile(r"-(?:xs|xxl|xl|l|m|s)$")
 
 
 class FootStoreSource(PriceSource):
@@ -100,6 +118,64 @@ class FootStoreSource(PriceSource):
                 if "mizuno" in loc.lower()
             )
         return urls
+
+    @staticmethod
+    def _slug_size_suffix(slug: str) -> str | None:
+        m = _SIZE_SUFFIX.search(slug)
+        return m.group(0).lstrip("-") if m else None
+
+    @classmethod
+    def _url_kind(cls, slug: str) -> str | None:
+        if cls._is_womens(slug) or cls._is_kids(slug):
+            return None
+        if any(m in slug for m in APPAREL_SLUG_MARKERS):
+            return "apparel"
+        if any(m in slug for m in SHOE_SLUG_MARKERS):
+            return "shoe"
+        return None
+
+    @classmethod
+    def _apparel_matches_size(cls, slug: str, size: str = APPAREL_SIZE) -> bool:
+        suffix = cls._slug_size_suffix(slug)
+        if suffix is None:
+            return True  # multi-size color page
+        return suffix == size.lower()
+
+    @classmethod
+    def _shoe_matches_size(cls, slug: str, us: str = SHOE_SIZE_US, eu: str = SHOE_SIZE_EU) -> bool:
+        # Explicit EU size segment in slug (foot-store convention).
+        if re.search(rf"(?:^|-){re.escape(eu)}(?:-|$)", slug):
+            return True
+        if re.search(rf"(?:^|-){re.escape(us)}(?:-|$)", slug):
+            return True
+        # Model pages without size in slug (multi-size JSON-LD).
+        if "running-shoes-mizuno" in slug or "shoes-mizuno-wave" in slug:
+            return True
+        if "trainers-mizuno" in slug and "-wave-" in slug:
+            return True
+        return False
+
+    @staticmethod
+    def _title_is_mens(title: str, description: str = "") -> bool:
+        text = f"{title} {description}".lower()
+        if re.search(r"\b(child|children|kids|kid|youth|junior|women|womens|wos|girl)\b", text):
+            return False
+        if "gender: male" in text or " men's " in f" {text} " or text.startswith("men "):
+            return True
+        if " male " in f" {text} ":
+            return True
+        return True
+
+    def _filter_scan_urls(self, urls: list[str], apparel_size: str, shoe_us: str, shoe_eu: str) -> list[str]:
+        kept: list[str] = []
+        for url in urls:
+            slug = self._slug(url)
+            kind = self._url_kind(slug)
+            if kind == "apparel" and self._apparel_matches_size(slug, apparel_size):
+                kept.append(url)
+            elif kind == "shoe" and self._shoe_matches_size(slug, shoe_us, shoe_eu):
+                kept.append(url)
+        return kept
 
     # -- matching ----------------------------------------------------------
 
@@ -241,12 +317,12 @@ class FootStoreSource(PriceSource):
 
     # -- product parsing ---------------------------------------------------
 
-    def _parse_product(self, url: str) -> tuple[Listing | None, bool]:
+    def _parse_product(self, url: str) -> tuple[Listing | None, bool, str]:
         try:
             resp = self._session.get(url, timeout=self.timeout)
             resp.raise_for_status()
         except requests.RequestException:
-            return None, False
+            return None, False, ""
 
         for block in re.findall(
             r'<script[^>]+type="application/ld\+json"[^>]*>(.*?)</script>',
@@ -257,20 +333,21 @@ class FootStoreSource(PriceSource):
                 data = json.loads(block.strip())
             except json.JSONDecodeError:
                 continue
-            listing, oos = self._listing_from_ld(data, url)
+            listing, oos, desc = self._listing_from_ld(data, url)
             if listing or oos:
-                return listing, oos
-        return None, False
+                return listing, oos, desc
+        return None, False, ""
 
-    def _listing_from_ld(self, data, url: str) -> tuple[Listing | None, bool]:
+    def _listing_from_ld(self, data, url: str) -> tuple[Listing | None, bool, str]:
         candidates = data if isinstance(data, list) else [data]
         for node in candidates:
             if not isinstance(node, dict) or node.get("@type") != "Product":
                 continue
             offers = node.get("offers")
             price, currency = _min_offer(offers)
+            description = str(node.get("description", "") or "")
             if price is None:
-                return None, True
+                return None, True, description
             condition = "New" if "New" in str(node.get("itemCondition", "")) else ""
             color = _normalize_color(str(node.get("color", "") or "").strip())
             if not color:
@@ -284,10 +361,47 @@ class FootStoreSource(PriceSource):
                 condition=condition,
                 buying_option="FIXED_PRICE",
                 color=color,
-            ), False
-        return None, False
+            ), False, description
+        return None, False, ""
 
     # -- API ---------------------------------------------------------------
+
+    def scan_deals(
+        self,
+        *,
+        apparel_size: str = APPAREL_SIZE,
+        shoe_size_us: str = SHOE_SIZE_US,
+        shoe_size_eu: str = SHOE_SIZE_EU,
+        max_pages: int = 350,
+        **kwargs,
+    ) -> list[Listing]:
+        """Scrape in-stock Mizuno deals from foot-store (no watchlist queries)."""
+        urls = self._filter_scan_urls(
+            self._load_urls(), apparel_size, shoe_size_us, shoe_size_eu
+        )
+        listings: list[Listing] = []
+        seen_urls: set[str] = set()
+        for i, url in enumerate(urls):
+            if i >= max_pages:
+                break
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            if i:
+                time.sleep(self.delay)
+            listing, _, desc = self._parse_product(url)
+            if not listing:
+                continue
+            slug = self._slug(url)
+            if not self._title_is_mens(listing.title, desc):
+                continue
+            listing.product_name = normalize_product_name(listing.title)
+            apply_msrp(listing)
+            if (listing.discount_pct or 0) <= 0:
+                continue
+            listings.append(listing)
+        self._last_oos_count = 0
+        return listings
 
     def search(self, query: str, limit: int = 10, **kwargs) -> list[Listing]:
         toks = self._tokenize(query)
@@ -302,7 +416,7 @@ class FootStoreSource(PriceSource):
                 break
             if i:
                 time.sleep(self.delay)
-            listing, out_of_stock = self._parse_product(url)
+            listing, out_of_stock, _desc = self._parse_product(url)
             if out_of_stock:
                 oos += 1
             if listing and self._listing_matches_query(listing.title, toks):

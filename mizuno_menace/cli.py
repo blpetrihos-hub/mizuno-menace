@@ -12,7 +12,8 @@ from . import output
 from .aggregator import Aggregator
 from .config import load_ebay_config
 from .paths import find_config, user_data_dir
-from .products import default_products, load_products, products_from_queries
+from .products import load_products, products_from_queries
+from .search_criteria import APPAREL_SIZE, SHOE_SIZE_US
 from .sources import DemoSource, EbaySource, FootStoreSource
 
 
@@ -38,21 +39,33 @@ def load_input_products(args: argparse.Namespace) -> list | None:
         if args.products.exists():
             return load_products(args.products)
         return None
-    found = find_config("products.json")
-    if found:
-        return load_products(found)
-    return default_products()
+    if args.watchlist:
+        found = find_config("products.json")
+        if found:
+            return load_products(found)
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="mizuno-menace",
-        description="Find Mizuno deals and rank them by discount vs MSRP.",
+        description="Scrape Mizuno deals and rank the top discounts vs MSRP.",
     )
-    parser.add_argument("-p", "--products", type=Path, default=None)
+    parser.add_argument(
+        "-p", "--products", type=Path, default=None,
+        help="Optional watchlist JSON (legacy; default is full scrape mode).",
+    )
+    parser.add_argument(
+        "--watchlist", action="store_true",
+        help="Use products.json watchlist instead of scraping all Mizuno deals.",
+    )
     parser.add_argument("-q", "--query", action="append", default=[])
     parser.add_argument("-n", "--limit", type=int, default=25)
     parser.add_argument("-t", "--top", type=int, default=15)
+    parser.add_argument(
+        "--max-pages", type=int, default=350,
+        help="Max foot-store product pages to scan (scrape mode only).",
+    )
     parser.add_argument("--csv", type=Path)
     parser.add_argument("--json", type=Path)
     parser.add_argument("--html", type=Path, default=None)
@@ -70,14 +83,6 @@ def main(argv: list[str] | None = None) -> int:
 
     console = Console(force_terminal=True)
 
-    products = load_input_products(args)
-    if products is None:
-        console.print(f"[red]Product list not found:[/red] {args.products}")
-        return 2
-    if not products:
-        console.print("[red]No products to search.[/red]")
-        return 2
-
     sources = build_sources(
         use_demo=not args.no_fallback,
         force_demo=args.demo,
@@ -87,12 +92,24 @@ def main(argv: list[str] | None = None) -> int:
         console.print("[red]No data sources available.[/red] Add eBay keys or use --demo.")
         return 1
 
-    console.print(
-        f"Checking {len(products)} product(s) via {', '.join(s.name for s in sources)} …\n"
-    )
-
     agg = Aggregator(sources, limit=args.limit, use_aspects=not args.no_aspect)
-    results = agg.search_all(products)
+    products = load_input_products(args)
+
+    if products is not None:
+        if not products:
+            console.print("[red]No products to search.[/red]")
+            return 2
+        console.print(
+            f"Checking {len(products)} watchlist item(s) via "
+            f"{', '.join(s.name for s in sources)} …\n"
+        )
+        results = agg.search_all(products)
+    else:
+        console.print(
+            f"Scanning Mizuno deals (mens {APPAREL_SIZE} apparel, mens US {SHOE_SIZE_US} "
+            f"shoes) via {', '.join(s.name for s in sources)} …\n"
+        )
+        results = agg.scan_deals(max_pages=args.max_pages)
 
     ranked = output.print_best_discounts(results, console, top=args.top)
 

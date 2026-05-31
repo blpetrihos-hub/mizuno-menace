@@ -225,11 +225,16 @@ def _all_discounted(results: list[ItemResult]) -> list[Listing]:
 
 
 def _top_deal_groups(results: list[ItemResult], top: int = 15) -> list[tuple[str, list[Listing]]]:
-    ranked = _all_discounted(results)
-    groups = _group_by_product(ranked)
-    return [
-        (n, g) for n, g in groups if any((l.discount_pct or 0) > 0 for l in g)
-    ][:top]
+    """One row per product, ranked by best discount (colors are not separate deals)."""
+    ranked: list[tuple[str, list[Listing], float]] = []
+    for r in results:
+        best = r.best_discount
+        if not best or (best.discount_pct or 0) <= 0:
+            continue
+        below = [l for l in r.listings if (l.discount_pct or 0) > 0]
+        ranked.append((r.product_name or r.query, below, best.discount_pct or 0))
+    ranked.sort(key=lambda item: -item[2])
+    return [(name, grp) for name, grp, _ in ranked[:top]]
 
 
 def print_best_discounts(results: list[ItemResult], console: Console, top: int = 15) -> list[Listing]:

@@ -4,15 +4,16 @@
   <img src="mizuno_menace/assets/logo.png" alt="Mizuno Menace" height="52">
 </p>
 
-Compare Mizuno apparel and shoe prices across retailers and rank the best deals against MSRP.
+Compare Mizuno apparel and shoe prices across retailers and rank the top 15 discounts vs MSRP.
+
+**Default mode** scrapes foot-store for all in-stock Mizuno deals matching **mens medium apparel** and **mens US size 11 shoes** — no watchlist required.
 
 ## Features
 
+- **Scrape mode** — discovers Mizuno deals from foot-store sitemaps (mens M + mens 11)
 - **foot-store.com** — live retail prices (works out of the box)
 - **eBay** — New With Tags, Buy It Now only, sorted by price + shipping (requires API keys)
-- Discount ranking vs Mizuno MSRP
-- Clickable color links in terminal and HTML reports
-- Standalone Windows executable (no Python install required)
+- Top 15 product deals ranked by discount vs Mizuno MSRP (color variants grouped per product)
 
 ## Quick start
 
@@ -22,7 +23,7 @@ Compare Mizuno apparel and shoe prices across retailers and rank the best deals 
 .\MizunoMenace.exe
 ```
 
-Runs the built-in product list against foot-store, writes a report to `%LOCALAPPDATA%\MizunoMenace\report.html`, and opens it in your browser.
+Runs a full Mizuno deal scan, writes a report to `%LOCALAPPDATA%\MizunoMenace\report.html`, and opens it in your browser.
 
 ### From source
 
@@ -48,39 +49,15 @@ EBAY_CLIENT_ID=...
 EBAY_CLIENT_SECRET=...
 ```
 
-Optional `products.json` beside the executable overrides the built-in list:
-
-```json
-{
-  "products": [
-    {
-      "name": "Mizuno Wave Rider (mens 11)",
-      "query": "Mizuno Wave Rider mens 11",
-      "msrp": 140.00,
-      "size": "11",
-      "kind": "shoe"
-    }
-  ]
-}
-```
-
-| Field | Description |
-| --- | --- |
-| `query` | Search term sent to each source |
-| `msrp` | Mizuno retail price for discount calculation |
-| `size` | Used for eBay size aspect filtering |
-| `kind` | `apparel` or `shoe` |
-
-Verify MSRP values against [mizunousa.com](https://www.mizunousa.com) for accurate discount percentages.
-
-## CLI
+Optional legacy watchlist via `--watchlist` and `products.json`. Default scrape filters: **mens M apparel**, **mens US 11 shoes**.
 
 | Flag | Description |
 | --- | --- |
-| `-p, --products` | Product list JSON |
-| `-q, --query` | One-off search term (repeatable) |
-| `-n, --limit` | Max listings per product (default 25) |
-| `-t, --top` | Products in the deals table (default 15) |
+| `-t, --top` | Top product deals to show (default 15) |
+| `--max-pages` | Max foot-store pages to scan (default 350) |
+| `--watchlist` | Use `products.json` instead of scrape mode |
+| `-p, --products` | Custom watchlist JSON path |
+| `-q, --query` | One-off search term (watchlist mode) |
 | `--csv`, `--json`, `--html` | Export paths |
 | `--no-browser` | Skip opening the HTML report |
 | `--no-footstore` | eBay only |

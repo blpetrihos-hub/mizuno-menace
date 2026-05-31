@@ -385,6 +385,7 @@ def dark_theme_css() -> str:
       --border: #3c3c3c;
       --header: #252526;
       --disc: #89d185;
+      --logo-fg: #cccccc;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -420,15 +421,17 @@ def dark_theme_css() -> str:
       user-select: none;
       background: transparent;
     }
-    .side-brand img {
+    .logo-mark {
       display: block;
+      object-fit: contain;
+      image-rendering: high-quality;
+      image-rendering: -webkit-optimize-contrast;
+    }
+    .side-brand img {
       width: 100%;
       height: auto;
       max-height: min(92vh, 980px);
-      object-fit: contain;
       object-position: center;
-      image-rendering: high-quality;
-      image-rendering: -webkit-optimize-contrast;
     }
     @media (max-width: 1040px) {
       .side-brand { display: none; }
@@ -441,13 +444,9 @@ def dark_theme_css() -> str:
       padding: 0.5rem 0 1.25rem;
     }
     .brand img {
-      display: block;
       width: min(480px, 92vw);
       height: auto;
       max-height: 72px;
-      object-fit: contain;
-      image-rendering: high-quality;
-      image-rendering: -webkit-optimize-contrast;
     }
     .brand-text {
       font-size: 1.75rem;
@@ -464,7 +463,7 @@ def brand_header_html() -> str:
         w, h = _logo_pixel_size()
         dims = f' width="{w}" height="{h}"' if w and h else ""
         return (
-            f'<header class="brand"><img src="{logo_uri}" alt="Mizuno Menace"'
+            f'<header class="brand"><img class="logo-mark" src="{logo_uri}" alt="Mizuno Menace"'
             f'{dims} decoding="async"></header>'
         )
     return '<header class="brand"><span class="brand-text">Mizuno Menace</span></header>'
@@ -476,7 +475,7 @@ def _vertical_brand_aside() -> str:
         return ""
     return (
         f'<aside class="side-brand">'
-        f'<img src="{uri}" alt="" aria-hidden="true" decoding="async">'
+        f'<img class="logo-mark" src="{uri}" alt="" aria-hidden="true" decoding="async">'
         f"</aside>"
     )
 

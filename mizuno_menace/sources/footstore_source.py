@@ -35,6 +35,7 @@ STOPWORDS = {
 }
 # Slug fragments that indicate the wrong gender / product line.
 WOMENS_MARKERS = ("women-s", "womens-", "-women-", "woman-s")
+KIDS_MARKERS = ("children-s", "children-", "kids-", "youth-", "junior-")
 # Known two-word colors at the end of foot-store slugs (longest first).
 SLUG_COLOR_PHRASES = (
     "navy-blue", "royal-blue", "maui-blue", "blue-granite", "royal-white",
@@ -116,17 +117,30 @@ class FootStoreSource(PriceSource):
         return any(m in slug for m in WOMENS_MARKERS) or slug.startswith("women-")
 
     @staticmethod
+    def _is_kids(slug: str) -> bool:
+        return any(m in slug for m in KIDS_MARKERS)
+
+    @staticmethod
+    def _shoe_model(slug: str) -> int | None:
+        m = re.search(r"wave-(?:rider|inspire)-(\d+)", slug)
+        return int(m.group(1)) if m else None
+
+    @staticmethod
+    def _size_in_slug(size: str, slug: str) -> bool:
+        if not size.isdigit():
+            return size in slug
+        return bool(re.search(rf"(?:^|-){re.escape(size)}(?:-|$)", slug))
+
+    @staticmethod
     def _token_matches_slug(token: str, slug: str) -> bool:
+        if token.isdigit():
+            return FootStoreSource._size_in_slug(token, slug)
         if token in slug:
             return True
         if token == "hoodie" and "hooded" in slug:
             return True
         if token == "tights" and ("tight" in slug or "legging" in slug):
             return True
-        if token in ("rider", "inspire", "wave") and "trainers" in slug:
-            return True
-        if token == "11" or token.isdigit():
-            return token in slug
         return False
 
     def _score_match(self, slug: str, toks: list[str]) -> int:
@@ -135,6 +149,12 @@ class FootStoreSource(PriceSource):
             return 0
         if self._is_womens(slug):
             score -= 4
+        if self._is_kids(slug):
+            score -= 5
+        if "rider" in toks and "inspire" in slug and "rider" not in slug:
+            score -= 6
+        if "inspire" in toks and "rider" in slug and "inspire" not in slug:
+            score -= 6
         # Prefer exact product-line tokens (athletics vs generic team gear).
         if "athletics" in toks:
             if "athletics" in slug:
@@ -159,8 +179,16 @@ class FootStoreSource(PriceSource):
             score += 2
         if "hoodie" in toks and "hoodie" in slug:
             score += 1
-        if "trainers" in slug and ("rider" in toks or "inspire" in toks or "wave" in toks):
-            score += 2
+        if "hoodie" in toks and "graphic" in slug and "graphic" not in toks:
+            score -= 2
+        if "rider" in toks or "inspire" in toks:
+            model = self._shoe_model(slug)
+            if model is not None:
+                score += min(model // 5, 4)
+            if "running-shoes" in slug:
+                score += 1
+            if "trainers" in slug:
+                score -= 1
         return score
 
     def _match(self, query: str, urls: list[str]) -> list[str]:
@@ -199,6 +227,8 @@ class FootStoreSource(PriceSource):
             return False
         if "inspire" in toks and "inspire" not in title_l:
             return False
+        if "rider" in toks and "inspire" in title_l and "rider" not in title_l:
+            return False
         if "merino" in toks and "merino" not in title_l:
             return False
         if "tights" in toks and "tight" not in title_l and "legging" not in title_l:
@@ -211,12 +241,12 @@ class FootStoreSource(PriceSource):
 
     # -- product parsing ---------------------------------------------------
 
-    def _parse_product(self, url: str) -> Listing | None:
+    def _parse_product(self, url: str) -> tuple[Listing | None, bool]:
         try:
             resp = self._session.get(url, timeout=self.timeout)
             resp.raise_for_status()
         except requests.RequestException:
-            return None
+            return None, False
 
         for block in re.findall(
             r'<script[^>]+type="application/ld\+json"[^>]*>(.*?)</script>',
@@ -227,12 +257,12 @@ class FootStoreSource(PriceSource):
                 data = json.loads(block.strip())
             except json.JSONDecodeError:
                 continue
-            listing = self._listing_from_ld(data, url)
-            if listing:
-                return listing
-        return None
+            listing, oos = self._listing_from_ld(data, url)
+            if listing or oos:
+                return listing, oos
+        return None, False
 
-    def _listing_from_ld(self, data, url: str) -> Listing | None:
+    def _listing_from_ld(self, data, url: str) -> tuple[Listing | None, bool]:
         candidates = data if isinstance(data, list) else [data]
         for node in candidates:
             if not isinstance(node, dict) or node.get("@type") != "Product":
@@ -240,7 +270,7 @@ class FootStoreSource(PriceSource):
             offers = node.get("offers")
             price, currency = _min_offer(offers)
             if price is None:
-                continue
+                return None, True
             condition = "New" if "New" in str(node.get("itemCondition", "")) else ""
             color = _normalize_color(str(node.get("color", "") or "").strip())
             if not color:
@@ -254,8 +284,8 @@ class FootStoreSource(PriceSource):
                 condition=condition,
                 buying_option="FIXED_PRICE",
                 color=color,
-            )
-        return None
+            ), False
+        return None, False
 
     # -- API ---------------------------------------------------------------
 
@@ -264,6 +294,7 @@ class FootStoreSource(PriceSource):
         urls = self._load_urls()
         matches = self._match(query, urls)
         listings: list[Listing] = []
+        oos = 0
         for i, url in enumerate(matches):
             if len(listings) >= limit:
                 break
@@ -271,11 +302,18 @@ class FootStoreSource(PriceSource):
                 break
             if i:
                 time.sleep(self.delay)
-            listing = self._parse_product(url)
+            listing, out_of_stock = self._parse_product(url)
+            if out_of_stock:
+                oos += 1
             if listing and self._listing_matches_query(listing.title, toks):
                 listings.append(listing)
+        self._last_oos_count = oos
         listings.sort(key=lambda lst: lst.total)
         return listings[:limit]
+
+    @property
+    def last_oos_count(self) -> int:
+        return getattr(self, "_last_oos_count", 0)
 
 
 def _normalize_color(color: str) -> str:

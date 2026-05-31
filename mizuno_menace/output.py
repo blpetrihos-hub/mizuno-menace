@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import csv
 import html
 import json
 import webbrowser
-from datetime import datetime, timezone
 from pathlib import Path
 
 from rich.console import Console
@@ -15,6 +15,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .models import ItemResult, Listing
+from .paths import asset_path
 
 # Rich terminal colors approximating product color names.
 _RICH_COLOR_MAP: dict[str, str] = {
@@ -46,27 +47,31 @@ _RICH_COLOR_MAP: dict[str, str] = {
     "snow white": "white",
 }
 
-# CSS hex colors for the HTML report.
+# CSS hex colors for the HTML report (product color links).
 _CSS_COLOR_MAP: dict[str, str] = {
-    "black": "#1a1a1a",
-    "white": "#666666",
-    "red": "#c5221f",
-    "blue": "#1a73e8",
-    "navy": "#1a3a6e",
-    "navy blue": "#1a3a6e",
-    "royal": "#4169e1",
-    "royal blue": "#4169e1",
-    "green": "#137333",
-    "grey": "#5f6368",
-    "gray": "#5f6368",
-    "mercury": "#6b6b6b",
-    "baritone blue": "#2c5282",
-    "blue granite": "#4a7c9b",
-    "maui blue": "#00838f",
-    "aquifer": "#00838f",
-    "princess blue": "#1565c0",
-    "odyssey gray": "#757575",
-    "blacksand": "#3d3d3d",
+    "black": "#b0b0b0",
+    "white": "#e8e8e8",
+    "red": "#f48771",
+    "blue": "#569cd6",
+    "navy": "#6cb6ff",
+    "navy blue": "#6cb6ff",
+    "royal": "#6796e6",
+    "royal blue": "#6796e6",
+    "green": "#89d185",
+    "grey": "#9da5b4",
+    "gray": "#9da5b4",
+    "mercury": "#a8a8a8",
+    "baritone blue": "#6cb6ff",
+    "blue granite": "#4ec9b0",
+    "maui blue": "#4ec9b0",
+    "aquifer": "#4ec9b0",
+    "princess blue": "#6796e6",
+    "odyssey gray": "#9da5b4",
+    "blacksand": "#b0b0b0",
+    "fluorescent yellow": "#dcdcaa",
+    "tangelo": "#f48771",
+    "purple haze": "#c586c0",
+    "snow white": "#e8e8e8",
 }
 
 
@@ -96,12 +101,12 @@ def _rich_color(color: str) -> str:
 
 def _css_color(color: str) -> str:
     if not color:
-        return "#0b57d0"
+        return "#569cd6"
     key = color.strip().lower()
     if key in _CSS_COLOR_MAP:
         return _CSS_COLOR_MAP[key]
     primary = key.split("/")[0].strip()
-    return _CSS_COLOR_MAP.get(primary, "#0b57d0")
+    return _CSS_COLOR_MAP.get(primary, "#569cd6")
 
 
 def _sorted_listings(listings: list[Listing]) -> list[Listing]:
@@ -196,7 +201,6 @@ def _all_discounted(results: list[ItemResult]) -> list[Listing]:
     listings: list[Listing] = []
     for r in results:
         listings.extend(lst for lst in r.listings if lst.discount_pct is not None)
-    # Real deals first, then above-MSRP listings.
     listings.sort(
         key=lambda lst: (
             0 if (lst.discount_pct or 0) > 0 else 1,
@@ -206,59 +210,26 @@ def _all_discounted(results: list[ItemResult]) -> list[Listing]:
     return listings
 
 
-def print_product_summary(results: list[ItemResult], console: Console) -> None:
-    table = Table(title="Mizuno Menace - per-product summary", show_lines=True)
-    table.add_column("Product", style="bold", max_width=26)
-    table.add_column("Found", justify="right")
-    table.add_column("Cheapest\n(incl. ship)", justify="right", style="green")
-    table.add_column("MSRP", justify="right")
-    table.add_column("Best disc.", justify="right")
-    table.add_column("Save", justify="right", style="green")
-    table.add_column("Colors  (click to open)", overflow="fold")
-
-    for r in results:
-        if r.error:
-            table.add_row(
-                r.product_name or r.query, "0", "-", "-", "-", "-", "[red]error[/red]"
-            )
-            continue
-        if r.count == 0:
-            table.add_row(
-                r.product_name or r.query, "0", "-", "-", "-", "-", "[dim]none[/dim]"
-            )
-            continue
-        cur = r.currency
-        cheapest = r.cheapest
-        best = r.best_discount
-        msrp = cheapest.msrp if cheapest else None
-        table.add_row(
-            r.product_name or r.query,
-            str(r.count),
-            _money(cheapest.total if cheapest else None, cur),
-            _money(msrp, cur),
-            _pct(best.discount_pct if best else None),
-            _money(best.savings if best else None, cur),
-            _color_links_text(r.listings),
-        )
-    console.print(table)
+def _top_deal_groups(results: list[ItemResult], top: int = 15) -> list[tuple[str, list[Listing]]]:
+    ranked = _all_discounted(results)
+    groups = _group_by_product(ranked)
+    return [
+        (n, g) for n, g in groups if any((l.discount_pct or 0) > 0 for l in g)
+    ][:top]
 
 
 def print_best_discounts(results: list[ItemResult], console: Console, top: int = 15) -> list[Listing]:
-    listings = _all_discounted(results)
-    if not listings:
+    groups = _top_deal_groups(results, top=top)
+    if not groups:
         console.print(
-            "[yellow]No discounts to rank[/yellow] - no listings had a Mizuno MSRP "
-            "or an eBay list price to compare against."
+            "[yellow]No deals below MSRP[/yellow] — verify MSRP values or add eBay keys."
         )
         return []
 
-    groups = _group_by_product(listings)[:top]
-    # Product deals table: only groups with at least one below-MSRP listing.
-    groups = [(n, g) for n, g in groups if any((l.discount_pct or 0) > 0 for l in g)][:top]
     shown: list[Listing] = [lst for _, grp in groups for lst in grp]
 
     table = Table(
-        title=f"Top {len(groups)} product deals vs Mizuno price (eBay = NWT/Buy It Now)",
+        title=f"Top {top} product deals vs Mizuno MSRP",
         show_lines=True,
     )
     table.add_column("Product", style="bold", max_width=24)
@@ -303,9 +274,12 @@ def print_zero_result_notes(results: list[ItemResult], console: Console) -> None
     if missing:
         console.print("\n[dim]No in-stock listings found for:[/dim]")
         for r in missing:
-            console.print(f"  [dim]- {r.product_name or r.query}[/dim]")
+            line = f"  [dim]- {r.product_name or r.query}[/dim]"
+            if r.note:
+                line += f" [dim]({r.note})[/dim]"
+            console.print(line)
         console.print(
-            "[dim]  (Often out of stock on foot-store, or no eBay NWT listings yet.)[/dim]"
+            "[dim]  (Add eBay keys for NWT listings, or check back when foot-store restocks.)[/dim]"
         )
     if above_msrp:
         console.print("\n[yellow]Cheapest listing is at/above MSRP for:[/yellow]")
@@ -353,13 +327,49 @@ def prompt_open_links(listings: list[Listing], console: Console) -> None:
 # File export
 # ---------------------------------------------------------------------------
 
+def _logo_data_uri() -> str:
+    """Embedded logo for a self-contained HTML report."""
+    logo = asset_path("logo.png")
+    if not logo.exists():
+        return ""
+    encoded = base64.b64encode(logo.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _html_notes(results: list[ItemResult]) -> str:
+    """Compact footnotes for products not shown in the deals table."""
+    lines: list[str] = []
+    missing = [r for r in results if r.count == 0 and not r.error]
+    above = [
+        r for r in results
+        if r.cheapest and r.cheapest.discount_pct is not None and r.cheapest.discount_pct <= 0
+    ]
+    if missing:
+        for r in missing:
+            item = html.escape(r.product_name or r.query)
+            if r.note:
+                item += f" — {html.escape(r.note)}"
+            lines.append(f"<li>{item}</li>")
+    if above:
+        for r in above:
+            c = r.cheapest
+            lines.append(
+                "<li>"
+                f"{html.escape(r.product_name or r.query)}: "
+                f"{html.escape(_money(c.total, r.currency))} vs MSRP "
+                f"{html.escape(_money(c.msrp, r.currency))}"
+                "</li>"
+            )
+    if not lines:
+        return ""
+    return f'<div class="notes"><ul>{"".join(lines)}</ul></div>'
+
+
 def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
     """Write a self-contained HTML report with clickable color-named links."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    ranked = _all_discounted(results)
-    groups = _group_by_product(ranked)
-    groups = [(n, g) for n, g in groups if any((l.discount_pct or 0) > 0 for l in g)][:top]
-    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    groups = _top_deal_groups(results, top=top)
+    logo_uri = _logo_data_uri()
 
     def esc(value: object) -> str:
         return html.escape("" if value is None else str(value))
@@ -390,63 +400,61 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
             "</tr>"
         )
 
-    product_rows = []
-    for r in results:
-        cheapest = r.cheapest
-        best = r.best_discount
-        if r.error:
-            product_rows.append(
-                f"<tr><td>{esc(r.product_name or r.query)}</td>"
-                "<td>0</td><td>-</td><td>-</td><td>-</td><td>-</td>"
-                f"<td class='err'>{esc(r.error)}</td></tr>"
-            )
-            continue
-        if r.count == 0 or not cheapest:
-            product_rows.append(
-                f"<tr><td>{esc(r.product_name or r.query)}</td>"
-                "<td>0</td><td>-</td><td>-</td><td>-</td><td>-</td>"
-                "<td class='muted'>none</td></tr>"
-            )
-            continue
-        cur = r.currency
-        disc = f"{best.discount_pct:+.1f}%" if best and best.discount_pct is not None else "-"
-        product_rows.append(
-            "<tr>"
-            f"<td>{esc(r.product_name or r.query)}</td>"
-            f"<td>{r.count}</td>"
-            f"<td>{money(cheapest.total, cur)}</td>"
-            f"<td>{money(cheapest.msrp, cur)}</td>"
-            f"<td>{disc}</td>"
-            f"<td>{money(best.savings, cur) if best else '-'}</td>"
-            f"<td>{_html_color_links(r.listings)}</td>"
-            "</tr>"
-        )
+    header = (
+        f'<header class="brand"><img src="{logo_uri}" alt="Mizuno Menace"></header>'
+        if logo_uri
+        else '<header class="brand"><span class="brand-text">Mizuno Menace</span></header>'
+    )
+    notes = _html_notes(results)
 
     doc = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mizuno Menace - Deals Report</title>
+  <title>Mizuno Menace</title>
   <style>
-    body {{ font-family: Segoe UI, system-ui, sans-serif; margin: 2rem; color: #111; }}
-    h1 {{ margin-bottom: 0.2rem; }}
-    .meta {{ color: #666; margin-bottom: 1.5rem; }}
-    table {{ border-collapse: collapse; width: 100%; margin-bottom: 2rem; }}
-    th, td {{ border: 1px solid #ddd; padding: 0.55rem 0.65rem; vertical-align: top; }}
-    th {{ background: #f5f5f5; text-align: left; }}
+    :root {{
+      --bg: #1e1e1e;
+      --fg: #cccccc;
+      --muted: #858585;
+      --border: #3c3c3c;
+      --header: #252526;
+      --disc: #89d185;
+    }}
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: var(--bg);
+      color: var(--fg);
+    }}
+    .brand {{ margin-bottom: 1.75rem; }}
+    .brand img {{ display: block; height: 52px; width: auto; }}
+    .brand-text {{ font-size: 1.75rem; font-weight: 600; letter-spacing: -0.02em; }}
+    h2 {{
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--fg);
+      margin: 0 0 1rem;
+    }}
+    table {{ border-collapse: collapse; width: 100%; }}
+    th, td {{ border: 1px solid var(--border); padding: 0.6rem 0.7rem; vertical-align: top; }}
+    th {{ background: var(--header); text-align: left; font-weight: 600; }}
+    tr:nth-child(even) td {{ background: #232323; }}
     a {{ text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
-    .disc {{ color: #137333; font-weight: 600; }}
-    .muted {{ color: #666; font-size: 0.85rem; }}
-    .err {{ color: #b3261e; }}
+    .disc {{ color: var(--disc); font-weight: 600; }}
+    .muted {{ color: var(--muted); font-size: 0.85rem; }}
+    .notes {{ margin-top: 1.5rem; color: var(--muted); font-size: 0.9rem; }}
+    .notes ul {{ margin: 0; padding-left: 1.25rem; }}
+    .notes li {{ margin: 0.35rem 0; }}
   </style>
 </head>
 <body>
-  <h1>Mizuno Menace</h1>
-  <p class="meta">Report date: {esc(generated)}</p>
+  {header}
 
-  <h2>Top {len(groups)} product deals</h2>
+  <h2>Top {top} product deals</h2>
   <table>
     <thead>
       <tr>
@@ -455,22 +463,10 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
       </tr>
     </thead>
     <tbody>
-      {''.join(top_rows) if top_rows else '<tr><td colspan="7">No discounts found.</td></tr>'}
+      {''.join(top_rows) if top_rows else f'<tr><td colspan="7" class="muted">No deals below MSRP found.</td></tr>'}
     </tbody>
   </table>
-
-  <h2>Per-product summary</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Product</th><th>Found</th><th>Cheapest</th><th>MSRP</th>
-        <th>Best disc.</th><th>Save</th><th>Colors (click to open)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {''.join(product_rows)}
-    </tbody>
-  </table>
+  {notes}
 </body>
 </html>
 """
@@ -533,6 +529,7 @@ def write_json(results: list[ItemResult], path: Path) -> None:
                 "product": r.product_name or r.query,
                 "query": r.query,
                 "error": r.error,
+                "note": r.note,
                 "listings": [
                     {
                         "title": lst.title,

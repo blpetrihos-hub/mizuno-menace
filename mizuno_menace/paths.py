@@ -39,6 +39,17 @@ def cache_dir() -> Path:
     return d
 
 
+def package_dir() -> Path:
+    """Directory containing bundled package data (logo, defaults)."""
+    if is_frozen():
+        return Path(getattr(sys, "_MEIPASS", exe_dir())) / "mizuno_menace"
+    return Path(__file__).resolve().parent
+
+
+def asset_path(name: str) -> Path:
+    return package_dir() / "assets" / name
+
+
 def find_config(filename: str) -> Path | None:
     """Find a config file by searching cwd, the exe dir, then the user dir."""
     seen: set[Path] = set()

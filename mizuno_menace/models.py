@@ -116,6 +116,7 @@ class ItemResult:
     product_name: str = ""
     listings: list[Listing] = field(default_factory=list)
     error: Optional[str] = None
+    note: str = ""
 
     @property
     def count(self) -> int:

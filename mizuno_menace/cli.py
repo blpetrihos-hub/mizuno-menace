@@ -95,8 +95,6 @@ def main(argv: list[str] | None = None) -> int:
     results = agg.search_all(products)
 
     ranked = output.print_best_discounts(results, console, top=args.top)
-    console.print()
-    output.print_product_summary(results, console)
     output.print_zero_result_notes(results, console)
 
     html_path = args.html or (user_data_dir() / "report.html")

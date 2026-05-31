@@ -38,6 +38,14 @@ class Aggregator:
         result = ItemResult(query=product.query, product_name=product.name, listings=listings)
         if errors and not listings:
             result.error = "; ".join(errors)
+        elif not listings:
+            for source in self.sources:
+                oos = getattr(source, "last_oos_count", 0)
+                if oos:
+                    result.note = (
+                        f"{oos} matching listing(s) on {source.name} are out of stock."
+                    )
+                    break
         return result
 
     def search_all(self, products: list[Product]) -> list[ItemResult]:

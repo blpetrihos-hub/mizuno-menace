@@ -136,7 +136,7 @@ def scan_description(
     scope = normalize_search_scope(search_scope)
     custom = normalize_custom_query(custom_query)
     prefix = (
-        "Searches eBay for New With Tags, Buy It Now Mizuno listings — "
+        "Default searches for eBay: New With Tags, Buy It Now Mizuno listings — "
     )
     suffix = " — then opens a ranked HTML report."
 

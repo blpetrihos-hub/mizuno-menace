@@ -1,4 +1,4 @@
-# Copy the built exe to the Desktop folder and create the launcher shortcut.
+# Copy the built exe to Desktop\Mizuno Menace (exe, .env, shortcut only).
 # Usage:  powershell -ExecutionPolicy Bypass -File deploy-desktop.ps1
 
 $ErrorActionPreference = "Stop"
@@ -23,9 +23,10 @@ if (Test-Path $envSrc) {
     Copy-Item -Force $envSrc $envDst
 }
 
-$logoSrc = Join-Path $root "mizuno_menace\assets\logo.png"
-if (Test-Path $logoSrc) {
-    Copy-Item -Force $logoSrc (Join-Path $desktopFolder "logo.png")
+# Keep the folder minimal: remove extras from older deploys.
+foreach ($extra in @("logo.png", "START-HERE.txt", "START HERE.txt", "Mizuno Menace.lnk")) {
+    $path = Join-Path $desktopFolder $extra
+    if (Test-Path $path) { Remove-Item -Force $path }
 }
 
 Get-ChildItem $desktopFolder -Filter "*.lnk" | Remove-Item -Force
@@ -37,5 +38,6 @@ $shortcut.WorkingDirectory = $desktopFolder
 $shortcut.Description = "Mizuno Menace deal finder"
 $shortcut.Save()
 
-Write-Host "Desktop app updated:" -ForegroundColor Green
-Write-Host "  $shortcutPath"
+Write-Host "Desktop app ready:" -ForegroundColor Green
+Write-Host "  $desktopFolder"
+Write-Host "  Click Me To Run.lnk, MizunoMenace.exe, .env"

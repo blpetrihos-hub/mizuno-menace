@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import html
 import json
+import os
+import subprocess
 import sys
 import threading
 import time
@@ -27,6 +29,46 @@ SETTINGS_PORT = 8765
 
 _settings_server: HTTPServer | None = None
 _scan_complete = False
+
+_FULLSCREEN_SCRIPT = """
+<script>
+  (function () {
+    function tryFullscreen() {
+      var el = document.documentElement;
+      var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+      if (req) req.call(el).catch(function () {});
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', tryFullscreen);
+    } else {
+      tryFullscreen();
+    }
+  })();
+</script>
+"""
+
+
+def _open_settings_browser(url: str) -> None:
+    """Open the settings page; use browser fullscreen flags on Windows when possible."""
+    if sys.platform == "win32":
+        pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+        pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        browser_cmds: list[tuple[str, list[str]]] = [
+            (os.path.join(pf, "Google", "Chrome", "Application", "chrome.exe"), ["--start-fullscreen", url]),
+            (os.path.join(pf86, "Google", "Chrome", "Application", "chrome.exe"), ["--start-fullscreen", url]),
+            (os.path.join(pf, "Microsoft", "Edge", "Application", "msedge.exe"), ["--start-fullscreen", url]),
+            (os.path.join(pf86, "Microsoft", "Edge", "Application", "msedge.exe"), ["--start-fullscreen", url]),
+            (os.path.join(pf, "Mozilla Firefox", "firefox.exe"), ["-fullscreen", url]),
+        ]
+        for exe, args in browser_cmds:
+            if not os.path.isfile(exe):
+                continue
+            try:
+                subprocess.Popen([exe, *args], close_fds=True)
+                return
+            except OSError:
+                continue
+    webbrowser.open(url)
 
 
 def top_explicitly_set(argv: list[str] | None = None) -> bool:
@@ -298,7 +340,7 @@ def _settings_html(settings: ScanSettings) -> str:
       const scope = selectedScope();
       const custom = document.getElementById('custom_query').value.trim();
       const hint = document.getElementById('scan-hint');
-      const prefix = 'Searches eBay for New With Tags, Buy It Now Mizuno listings — ';
+      const prefix = 'Default searches for eBay: New With Tags, Buy It Now Mizuno listings — ';
       const suffix = ' — then opens a ranked HTML report.';
 
       if (custom) {{
@@ -323,6 +365,7 @@ def _settings_html(settings: ScanSettings) -> str:
     document.getElementById('shoe_size_us').addEventListener('change', updateScanHint);
     document.getElementById('custom_query').addEventListener('input', updateScanHint);
   </script>
+{_FULLSCREEN_SCRIPT}
 </body>
 </html>
 """
@@ -366,6 +409,7 @@ def _waiting_html() -> str:
     }}
     pollScanStatus();
   </script>
+{_FULLSCREEN_SCRIPT}
 </body>
 </html>
 """
@@ -464,7 +508,7 @@ def prompt_scan_settings(default: ScanSettings | None = None) -> ScanSettings:
     _settings_server = server
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    webbrowser.open(f"http://127.0.0.1:{SETTINGS_PORT}/")
+    _open_settings_browser(f"http://127.0.0.1:{SETTINGS_PORT}/")
     settings_received.wait()
     return choice["settings"] or default
 

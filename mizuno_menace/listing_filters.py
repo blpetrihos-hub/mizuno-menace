@@ -55,19 +55,37 @@ _GOLF_WORD = re.compile(
     re.IGNORECASE,
 )
 
+_BASEBALL_GEAR = re.compile(
+    r"\b("
+    r"baseball|"
+    r"softball|"
+    r"fastpitch|"
+    r"batting\s+gloves?|"
+    r"batting\s+tee|"
+    r"baseball\s+gloves?|"
+    r"baseball\s+pants?|"
+    r"baseball\s+cleats?|"
+    r"baseball\s+shoes?|"
+    r"baseball\s+jersey|"
+    r"baseball\s+shirt|"
+    r"baseball\s+uniform|"
+    r"softball\s+cleats?|"
+    r"softball\s+shoes?|"
+    r"softball\s+jersey|"
+    r"softball\s+pants?"
+    r")\b",
+    re.IGNORECASE,
+)
+
 _FIELD_SPORT = re.compile(
     r"\b("
     r"futsal|"
     r"soccer\s+shoes?|"
     r"monarcida|"
     r"neo\s+sala|"
-    r"baseball\s+shoes?|"
-    r"softball\s+shoes?|"
     r"wave\s+lightrevo|"
     r"lightrevo|"
-    r"turf\s+shoes?|"
-    r"baseball\s+jersey|"
-    r"softball\s+jersey"
+    r"turf\s+shoes?"
     r")\b",
     re.IGNORECASE,
 )
@@ -95,6 +113,7 @@ EXCLUSION_LABELS: dict[str, str] = {
     "cleats": "cleat",
     "unisex": "unisex",
     "golf": "golf",
+    "baseball": "baseball",
     "field_sport": "field sport",
     "junk": "junk/merch",
 }
@@ -132,6 +151,10 @@ def is_golf_listing(text: str) -> bool:
     return bool(_GOLF_WORD.search(text or ""))
 
 
+def is_baseball_listing(text: str) -> bool:
+    return bool(_BASEBALL_GEAR.search(text or ""))
+
+
 def is_field_sport_listing(text: str) -> bool:
     return bool(_FIELD_SPORT.search(text or ""))
 
@@ -167,6 +190,8 @@ def exclusion_reason(lst: Listing) -> str | None:
         return "unisex"
     if is_golf_listing(text):
         return "golf"
+    if is_baseball_listing(text):
+        return "baseball"
     if is_field_sport_listing(text):
         return "field_sport"
     if is_junk_merch_listing(text):

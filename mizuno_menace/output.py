@@ -394,14 +394,14 @@ def dark_theme_css() -> str:
       color: var(--fg);
     }
     .page {
-      max-width: 1280px;
+      max-width: 1440px;
       margin: 0 auto;
     }
     .table-stage {
       display: flex;
       align-items: stretch;
       justify-content: center;
-      gap: clamp(0.5rem, 2vw, 1.25rem);
+      gap: clamp(0.75rem, 2.5vw, 1.75rem);
       margin-top: 0.25rem;
     }
     .table-wrap {
@@ -410,7 +410,7 @@ def dark_theme_css() -> str:
       overflow-x: auto;
     }
     .side-brand {
-      flex: 0 0 clamp(52px, 7.5vw, 96px);
+      flex: 0 0 clamp(120px, 14vw, 200px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -418,35 +418,22 @@ def dark_theme_css() -> str:
       position: relative;
       pointer-events: none;
       user-select: none;
-    }
-    .side-brand::before {
-      content: "";
-      position: absolute;
-      inset: -8% -20%;
-      background: radial-gradient(
-        ellipse at center,
-        rgba(204, 204, 204, 0.07) 0%,
-        transparent 72%
-      );
-      z-index: 0;
+      background: transparent;
     }
     .side-brand img {
-      position: relative;
-      z-index: 1;
       display: block;
       width: 100%;
       height: auto;
-      max-height: min(78vh, 820px);
+      max-height: min(92vh, 980px);
       object-fit: contain;
       object-position: center;
-      opacity: 0.82;
-      mix-blend-mode: screen;
-      filter: contrast(1.08) brightness(0.92);
+      image-rendering: high-quality;
+      image-rendering: -webkit-optimize-contrast;
     }
     .side-brand--right img {
       transform: scaleX(-1);
     }
-    @media (max-width: 920px) {
+    @media (max-width: 1040px) {
       .side-brand { display: none; }
     }
     .brand {

@@ -11,6 +11,7 @@ from rich.console import Console
 from . import output
 from .aggregator import Aggregator
 from .config import load_ebay_config
+from .launcher import load_last_top, prompt_top_count, save_last_top
 from .paths import find_config, user_data_dir
 from .products import load_products, products_from_queries
 from .search_criteria import APPAREL_SIZE, SHOE_SIZE_US
@@ -61,7 +62,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("-q", "--query", action="append", default=[])
     parser.add_argument("-n", "--limit", type=int, default=25)
-    parser.add_argument("-t", "--top", type=int, default=15)
+    parser.add_argument("-t", "--top", type=int, default=None,
+                        help="Top product deals to show (default: pick on settings page).")
+    parser.add_argument(
+        "--no-settings",
+        action="store_true",
+        help="Skip the settings page and use --top or the last saved choice.",
+    )
     parser.add_argument(
         "--max-pages", type=int, default=350,
         help="Max foot-store product pages to scan (scrape mode only).",
@@ -82,6 +89,14 @@ def main(argv: list[str] | None = None) -> int:
         args.demo = True
 
     console = Console(force_terminal=True)
+
+    if args.top is not None:
+        top = args.top
+    elif args.no_settings:
+        top = load_last_top()
+    else:
+        top = prompt_top_count(load_last_top())
+    save_last_top(top)
 
     sources = build_sources(
         use_demo=not args.no_fallback,
@@ -123,10 +138,10 @@ def main(argv: list[str] | None = None) -> int:
         console.print()
         results = agg.scan_deals(max_pages=args.max_pages)
 
-    ranked = output.print_best_discounts(results, console, top=args.top)
+    ranked = output.print_best_discounts(results, console, top=top)
 
     html_path = args.html or (user_data_dir() / "report.html")
-    output.write_html(results, html_path, top=args.top)
+    output.write_html(results, html_path, top=top)
     console.print(f"\nReport: {html_path}")
 
     if not args.no_browser:

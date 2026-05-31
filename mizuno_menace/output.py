@@ -17,62 +17,99 @@ from rich.text import Text
 from .models import ItemResult, Listing
 from .paths import asset_path
 
-# Rich terminal colors approximating product color names.
-_RICH_COLOR_MAP: dict[str, str] = {
-    "black": "black",
-    "white": "white",
-    "red": "red",
-    "blue": "blue",
-    "navy": "blue",
-    "navy blue": "blue",
-    "royal": "bright_blue",
-    "royal blue": "bright_blue",
-    "green": "green",
-    "grey": "bright_black",
-    "gray": "bright_black",
-    "mercury": "bright_black",
-    "baritone blue": "blue",
-    "blue granite": "cyan",
-    "maui blue": "cyan",
-    "aquifer": "cyan",
-    "princess blue": "bright_blue",
-    "odyssey gray": "bright_black",
-    "blacksand": "bright_black",
-    "metallicgray": "bright_black",
-    "metallic gray": "bright_black",
-    "dress blues": "blue",
-    "fluorescent yellow": "yellow",
-    "tangelo": "bright_red",
-    "purple haze": "magenta",
-    "snow white": "white",
-}
-
-# CSS hex colors for the HTML report (product color links).
 _CSS_COLOR_MAP: dict[str, str] = {
     "black": "#b0b0b0",
     "white": "#e8e8e8",
+    "snow white": "#e8e8e8",
     "red": "#f48771",
+    "bordeaux": "#c586c0",
+    "burgundy": "#c586c0",
     "blue": "#569cd6",
+    "light blue": "#6cb6ff",
     "navy": "#6cb6ff",
     "navy blue": "#6cb6ff",
     "royal": "#6796e6",
     "royal blue": "#6796e6",
-    "green": "#89d185",
-    "grey": "#9da5b4",
-    "gray": "#9da5b4",
-    "mercury": "#a8a8a8",
+    "princess blue": "#6796e6",
     "baritone blue": "#6cb6ff",
     "blue granite": "#4ec9b0",
     "maui blue": "#4ec9b0",
     "aquifer": "#4ec9b0",
-    "princess blue": "#6796e6",
+    "green": "#89d185",
+    "grey": "#9da5b4",
+    "gray": "#9da5b4",
+    "mercury": "#a8a8a8",
     "odyssey gray": "#9da5b4",
     "blacksand": "#b0b0b0",
+    "metallicgray": "#9da5b4",
+    "metallic gray": "#9da5b4",
+    "yellow": "#dcdcaa",
     "fluorescent yellow": "#dcdcaa",
+    "fluorescent orange": "#f48771",
+    "orange": "#f48771",
     "tangelo": "#f48771",
+    "purple": "#c586c0",
     "purple haze": "#c586c0",
-    "snow white": "#e8e8e8",
+    "pink": "#f0a0c0",
+    "pink fluo": "#f0a0c0",
+    "fluo": "#dcdcaa",
+    "silver": "#c0c0c0",
+    "copper": "#d4876a",
+    "brown": "#c4a882",
+    "lava smoke": "#9da5b4",
+    "wild wind": "#6cb6ff",
+    "neon yellow": "#dcdcaa",
+    "neon": "#dcdcaa",
+    "dress blues": "#6cb6ff",
 }
+
+
+def _rich_color_map() -> dict[str, str]:
+    return {
+        "black": "grey70",
+        "white": "white",
+        "snow white": "white",
+        "red": "red1",
+        "bordeaux": "magenta",
+        "burgundy": "magenta",
+        "blue": "bright_blue",
+        "light blue": "bright_blue",
+        "navy": "blue",
+        "navy blue": "blue",
+        "royal": "bright_blue",
+        "royal blue": "bright_blue",
+        "princess blue": "bright_blue",
+        "baritone blue": "blue",
+        "blue granite": "cyan",
+        "maui blue": "cyan",
+        "aquifer": "cyan",
+        "green": "green",
+        "grey": "bright_black",
+        "gray": "bright_black",
+        "mercury": "bright_black",
+        "odyssey gray": "bright_black",
+        "blacksand": "grey70",
+        "metallicgray": "bright_black",
+        "metallic gray": "bright_black",
+        "yellow": "yellow",
+        "fluorescent yellow": "yellow",
+        "fluorescent orange": "bright_red",
+        "orange": "bright_red",
+        "tangelo": "bright_red",
+        "purple": "magenta",
+        "purple haze": "magenta",
+        "pink": "bright_magenta",
+        "pink fluo": "bright_magenta",
+        "fluo": "yellow",
+        "silver": "grey70",
+        "copper": "bright_red",
+        "brown": "yellow",
+        "lava smoke": "bright_black",
+        "wild wind": "bright_blue",
+        "neon yellow": "yellow",
+        "neon": "yellow",
+        "dress blues": "blue",
+    }
 
 
 def _money(value: float | None, currency: str) -> str:
@@ -89,46 +126,46 @@ def _pct(value: float | None) -> str:
     return f"[{tone}]{value:+.1f}%[/{tone}]"
 
 
-def _rich_color(color: str) -> str:
+def _match_color_name(color: str, mapping: dict[str, str], default: str) -> str:
     if not color:
-        return "bright_blue"
+        return default
     key = color.strip().lower()
-    if key in _RICH_COLOR_MAP:
-        return _RICH_COLOR_MAP[key]
-    primary = key.split("/")[0].strip()
-    return _RICH_COLOR_MAP.get(primary, "bright_blue")
+    if key in mapping:
+        return mapping[key]
+    # Longest phrase match (e.g. "fluorescent yellow" before "yellow").
+    for phrase in sorted(mapping, key=len, reverse=True):
+        if phrase in key:
+            return mapping[phrase]
+    for part in [p.strip() for p in key.replace("/", " ").split() if p.strip()]:
+        if part in mapping:
+            return mapping[part]
+    return default
+
+
+def _rich_color(color: str) -> str:
+    return _match_color_name(color, _rich_color_map(), "bright_blue")
 
 
 def _css_color(color: str) -> str:
-    if not color:
-        return "#569cd6"
-    key = color.strip().lower()
-    if key in _CSS_COLOR_MAP:
-        return _CSS_COLOR_MAP[key]
-    primary = key.split("/")[0].strip()
-    return _CSS_COLOR_MAP.get(primary, "#569cd6")
+    return _match_color_name(color, _CSS_COLOR_MAP, "#569cd6")
 
 
 def _sorted_listings(listings: list[Listing]) -> list[Listing]:
-    """Unique listings sorted cheapest-first; dedupe same color keeping cheapest."""
-    seen_colors: set[str] = set()
+    """Unique listings sorted cheapest-first; dedupe by URL, else color."""
+    seen: set[str] = set()
     unique: list[Listing] = []
     for lst in sorted(listings, key=lambda x: x.total):
-        key = (lst.color or lst.url or lst.title).lower()
-        if key in seen_colors:
+        key = (lst.url or lst.color or lst.title).lower()
+        if key in seen:
             continue
-        seen_colors.add(key)
+        seen.add(key)
         unique.append(lst)
     return unique
 
 
-MAX_COLOR_LINKS = 8
-
-
 def _deal_listings(listings: list[Listing]) -> list[Listing]:
-    """Listings that are actually below MSRP; fall back to all if none qualify."""
-    discounted = [l for l in listings if (l.discount_pct or 0) > 0]
-    return _sorted_listings(discounted if discounted else listings)
+    """All color variants for display (product row is already a qualifying deal)."""
+    return _sorted_listings(listings)
 
 
 def _group_by_price(listings: list[Listing]) -> list[tuple[float, list[Listing]]]:
@@ -139,15 +176,13 @@ def _group_by_price(listings: list[Listing]) -> list[tuple[float, list[Listing]]
     return sorted(buckets.items(), key=lambda kv: kv[0])
 
 
-def _color_links_text(listings: list[Listing], *, max_links: int = MAX_COLOR_LINKS) -> Text | str:
-    """Clickable color links; one price label per price tier."""
+def _color_links_text(listings: list[Listing]) -> Text | str:
+    """Clickable color links; one price label per price tier; all colors shown."""
     items = _deal_listings(listings)
     if not items:
         return "[dim]none[/dim]"
-    total = len(items)
-    display = items[:max_links]
     cell = Text()
-    for tier_i, (price, group) in enumerate(_group_by_price(display)):
+    for tier_i, (price, group) in enumerate(_group_by_price(items)):
         if tier_i:
             cell.append("   |   ", style="dim")
         for j, lst in enumerate(group):
@@ -163,21 +198,17 @@ def _color_links_text(listings: list[Listing], *, max_links: int = MAX_COLOR_LIN
                 )
                 cell.append(label, style=style)
             else:
-                cell.append(label)
+                cell.append(label, style=Style(color=_rich_color(lst.color)))
         cell.append(f" {_money(price, group[0].currency)}", style="dim")
-    if total > max_links:
-        cell.append(f"   +{total - max_links} more", style="dim")
     return cell
 
 
-def _html_color_links(listings: list[Listing], *, max_links: int = MAX_COLOR_LINKS) -> str:
+def _html_color_links(listings: list[Listing]) -> str:
     items = _deal_listings(listings)
     if not items:
         return '<span class="muted">none</span>'
-    total = len(items)
-    display = items[:max_links]
     tiers: list[str] = []
-    for price, group in _group_by_price(display):
+    for price, group in _group_by_price(items):
         parts: list[str] = []
         for lst in group:
             label = html.escape(lst.color or "View")
@@ -189,11 +220,9 @@ def _html_color_links(listings: list[Listing], *, max_links: int = MAX_COLOR_LIN
                     f"{label}</a>"
                 )
             else:
-                parts.append(label)
+                parts.append(f'<span style="color:{_css_color(lst.color)}">{label}</span>')
         price_label = html.escape(_money(price, group[0].currency))
         tiers.append(" ".join(parts) + f" <span class='muted'>{price_label}</span>")
-    if total > max_links:
-        tiers.append(f"<span class='muted'>+{total - max_links} more</span>")
     return " &nbsp;|&nbsp; ".join(tiers)
 
 
@@ -326,11 +355,61 @@ def _logo_data_uri() -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+def dark_theme_css() -> str:
+    return """
+    :root {
+      --bg: #1e1e1e;
+      --fg: #cccccc;
+      --muted: #858585;
+      --border: #3c3c3c;
+      --header: #252526;
+      --disc: #89d185;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      margin: 0;
+      padding: 2rem 1.5rem 2.5rem;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    .page {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .brand {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0 0 2rem;
+      padding: 0.5rem 0 1.25rem;
+    }
+    .brand img {
+      display: block;
+      width: min(480px, 92vw);
+      height: auto;
+      max-height: 72px;
+      object-fit: contain;
+    }
+    .brand-text {
+      font-size: 1.75rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      text-align: center;
+    }
+    """
+
+
+def brand_header_html() -> str:
+    logo_uri = _logo_data_uri()
+    if logo_uri:
+        return f'<header class="brand"><img src="{logo_uri}" alt="Mizuno Menace"></header>'
+    return '<header class="brand"><span class="brand-text">Mizuno Menace</span></header>'
+
+
 def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
     """Write a self-contained HTML report with clickable color-named links."""
     path.parent.mkdir(parents=True, exist_ok=True)
     groups = _top_deal_groups(results, top=top)
-    logo_uri = _logo_data_uri()
 
     def esc(value: object) -> str:
         return html.escape("" if value is None else str(value))
@@ -357,15 +436,9 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
             f"<td>{esc(sources)}</td>"
             f"<td>{money(best.reference_price, cur)}<br>"
             f"<span class='muted'>{esc(best.reference_label)}</span></td>"
-            f"<td>{_html_color_links(grp)}</td>"
+            f"<td class='colors'>{_html_color_links(grp)}</td>"
             "</tr>"
         )
-
-    header = (
-        f'<header class="brand"><img src="{logo_uri}" alt="Mizuno Menace"></header>'
-        if logo_uri
-        else '<header class="brand"><span class="brand-text">Mizuno Menace</span></header>'
-    )
 
     doc = f"""<!DOCTYPE html>
 <html lang="en">
@@ -374,45 +447,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mizuno Menace</title>
   <style>
-    :root {{
-      --bg: #1e1e1e;
-      --fg: #cccccc;
-      --muted: #858585;
-      --border: #3c3c3c;
-      --header: #252526;
-      --disc: #89d185;
-    }}
-    body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-      margin: 0;
-      padding: 2rem 1.5rem 2.5rem;
-      background: var(--bg);
-      color: var(--fg);
-    }}
-    .page {{
-      max-width: 1100px;
-      margin: 0 auto;
-    }}
-    .brand {{
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 0 0 2rem;
-      padding: 0.5rem 0 1.25rem;
-    }}
-    .brand img {{
-      display: block;
-      width: min(480px, 92vw);
-      height: auto;
-      max-height: 72px;
-      object-fit: contain;
-    }}
-    .brand-text {{
-      font-size: 1.75rem;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      text-align: center;
-    }}
+{dark_theme_css()}
     h2 {{
       font-size: 1.05rem;
       font-weight: 600;
@@ -424,6 +459,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
     th, td {{ border: 1px solid var(--border); padding: 0.6rem 0.7rem; vertical-align: top; }}
     th {{ background: var(--header); text-align: left; font-weight: 600; }}
     tr:nth-child(even) td {{ background: #232323; }}
+    td.colors {{ line-height: 1.65; }}
     a {{ text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
     .disc {{ color: var(--disc); font-weight: 600; }}
@@ -432,7 +468,7 @@ def write_html(results: list[ItemResult], path: Path, top: int = 15) -> None:
 </head>
 <body>
   <div class="page">
-  {header}
+  {brand_header_html()}
 
   <h2>Top {top} product deals</h2>
   <table>

@@ -4,16 +4,17 @@
   <img src="mizuno_menace/assets/logo.png" alt="Mizuno Menace" height="52">
 </p>
 
-Compare Mizuno apparel and shoe prices across retailers and rank the top 15 discounts vs MSRP.
+Compare Mizuno apparel and shoe prices across retailers and rank the top discounts vs MSRP.
 
-**Default mode** scrapes foot-store for all in-stock Mizuno deals matching **mens medium apparel** and **mens US size 11 shoes** — no watchlist required.
+**Default mode** scrapes foot-store for all in-stock Mizuno deals matching **mens medium apparel** and **mens US size 11 shoes** — no watchlist required. On launch, a settings page lets you pick **10–50 deals** (in 10s) before the scan runs.
 
 ## Features
 
+- **Settings page** — choose how many deals to show (10, 20, 30, 40, or 50) before scanning
 - **Scrape mode** — discovers Mizuno deals from foot-store sitemaps (mens M + mens 11)
 - **foot-store.com** — live retail prices (works out of the box)
-- **eBay** — New With Tags, Buy It Now only, sorted by price + shipping (requires API keys)
-- Top 15 product deals ranked by discount vs Mizuno MSRP (color variants grouped per product)
+- **eBay** — New With Tags, Buy It Now only, sorted by price + shipping (requires API keys in `.env`)
+- Top product deals ranked by discount vs Mizuno MSRP (all color variants listed per product)
 
 ## Quick start
 
@@ -23,7 +24,7 @@ Compare Mizuno apparel and shoe prices across retailers and rank the top 15 disc
 .\MizunoMenace.exe
 ```
 
-Runs a full Mizuno deal scan, writes a report to `%LOCALAPPDATA%\MizunoMenace\report.html`, and opens it in your browser.
+Runs a full Mizuno deal scan (after the settings page), writes a report to `%LOCALAPPDATA%\MizunoMenace\report.html`, and opens it in your browser.
 
 ### From source
 
@@ -42,18 +43,21 @@ Output: `dist\MizunoMenace.exe`
 
 ## Configuration
 
-Copy `.env.example` to `.env` and add eBay credentials when ready:
+Copy `.env.example` to `.env` and add eBay credentials when ready — that is the only setup required to enable eBay results:
 
 ```
 EBAY_CLIENT_ID=...
 EBAY_CLIENT_SECRET=...
 ```
 
+Foot-store scraping works without any API keys.
+
 Optional legacy watchlist via `--watchlist` and `products.json`. Default scrape filters: **mens M apparel**, **mens US 11 shoes**.
 
 | Flag | Description |
 | --- | --- |
-| `-t, --top` | Top product deals to show (default 15) |
+| `-t, --top` | Top product deals to show (skips settings page when set) |
+| `--no-settings` | Skip settings page; use `-t` or last saved choice (default 30) |
 | `--max-pages` | Max foot-store pages to scan (default 350) |
 | `--watchlist` | Use `products.json` instead of scrape mode |
 | `-p, --products` | Custom watchlist JSON path |
